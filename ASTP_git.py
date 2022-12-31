@@ -155,6 +155,3 @@ if __name__=="__main__":
 
         # 매수종목선정함수 및 매수
         stock_buying(stock_selector())
-
-        bullet = broker.fetch_present_balance()
-        pprint.pprint(bullet)
