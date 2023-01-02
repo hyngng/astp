@@ -68,6 +68,7 @@ def my_acc():
     print("총자산평가 : " + bullet['output3']['tot_asst_amt'])
 
 
+# 나스닥 상위 10개 기업
 def top10_stock_list_maker():
 
     # FinanceDataReader, 거래소 + 시총 상위 10위 기업
@@ -94,6 +95,7 @@ def stock_selector():
     return divider
 
 
+# 종목매수함수
 def stock_buying(divider):
 
     info_fstock = broker.fetch_price(top10_stock_list[0])                       # 시총 1위 기업정보
@@ -125,6 +127,7 @@ def stock_buying(divider):
         pprint.pprint(resp)
 
 
+# 공황대응함수
 def crisis_activated():
     print("임시 코드")
 
