@@ -1,54 +1,18 @@
-<h1>ASTP : Auto Stock Trading Program</h1>
-
-<h3>특징</h3>
-
-- 특정한 매매전략을 구현하는 것이 목표로, 전략은 다음과 같습니다.
-    - NDX 지수와 NASDAQ 상장 1, 2위 기업의 비율을 고려하여 주식을 매수합니다.
-    - NDX 지수가 폭락하거나, 환율이 과도하게 상승하는 등의 상황에서 보유주식을 전량 매도하고 20영업일간 매매활동을 중지합니다.  
-
-- 파이썬과 한국투자증권이 배포하는 Open API를 사용합니다.
-- [Yahoo Finance](https://finance.yahoo.com/quote/NQ=F?p=NQ=F&.tsrc=fin-srch) 크롤링을 통해 NDX 지수를 활용합니다.
-- <i><b>파양(PAYANG)</b>의 도움을 받았습니다.</i>
-
----
-
-<h3>사전작업</h3>
-
-- 한국투자증권에서 계좌를 개설합니다.
-- [한국투자증권 API(eFriend Expert)](https://www.truefriend.com/main/customer/systemdown/OpenAPI.jsp?cmd=TF04ea01200) 페이지에서 API 이용을 신청한 후, eFriend Expert 프로그램을 설치합니다.
-
-<h3>주의사항</h3>
-
-- 한국투자증권 계좌로 API를 신청한 후 APP Key, APP Secret를 발급받아 사용하며, 모의계좌의 경우에도 발급 및 사용이 필요합니다.
-- 공동인증서 모듈이 64bit를 미지원하는 이슈가 있기 때문에, 코드를 정상적으로 실행하기 위해서는 32bit 가상환경을 구축할 필요가 있습니다. 자세한 것은 [이곳]()을 참조할 수 있습니다.
-- 미국 장은 한국시간으로 밤 11:30부터 다음날 아침 6:30까지 열리기 때문에, 일반적인 경우와 달리 ASTP는 코드 동작을 확인할 수 있는 시간에 강한 제약이 있습니다.
-
----
-
-<h3>예정된 작업</h3>
-
-- FinanceDataReader 라이브러리 없이 코드를 동작할 수 있도록 
-- 디스코드 알림 함수가 작성 예정에 있습니다.
-- 공황 상황에 대응할 수 있는 함수가 작성 예정에 있습니다.
-- 매수 한도와 매도 조건이 추가될 예정입니다.
-- 클래스 작성 및 함수 유형화를 염두해두고 있습니다.
-- Android Studio를 통한 안드로이드 어플리케이션 제작이 예정되어 있습니다.
-
-<br/><br/><br/><br/>
-
----
- 
-<h3>코드</h3>
- 
-```python
+# 한투
 import mojito
+
+# pretty print
 import pprint
+
+# 시간
 import datetime
 from pytz import timezone
 
+# 크롤링
 import requests
 from bs4 import BeautifulSoup
 
+# 주식데이터
 import yfinance as yf
 import FinanceDataReader as fdr
 import pandas as pd
@@ -109,9 +73,10 @@ def my_acc():
 
     bullet = broker.fetch_present_balance()                                      # 잔고조회
     print("총자산평가 : " + bullet['output3']['tot_asst_amt'])
+    # print("출금가능 외화 : " + str(bullet['output2']['frcr_drwg_psbl_amt_1']))
+    # print("출금가능 원화 : " + bullet['output2']['frcr_evlu_amt2'])
 
 
-# 나스닥 상위 10개 기업 리스트 생성
 def top10_stock_list_maker():
 
     # FinanceDataReader, 거래소 + 시총 상위 10위 기업
@@ -123,6 +88,9 @@ def top10_stock_list_maker():
 
 # 매수종목선정함수
 def stock_selector():
+
+    # 달러잔고 or ETF 소유 시 전량매도 및 환전
+    # print("총외화잔고합계는 " + bullet['output3']['tot_frcr_cblc_smtl'] + "원 입니다.")
 
     fstock = yf.Ticker(top10_stock_list[0]).info["marketCap"]                   # 시가총액 1위
     sstock = yf.Ticker(top10_stock_list[1]).info["marketCap"]                   # 시가총액 2위
@@ -138,7 +106,6 @@ def stock_selector():
     return divider
 
 
-# 종목주문함수
 def stock_buying(divider):
 
     info_fstock = broker.fetch_price(top10_stock_list[0])                       # 시총 1위 기업정보
@@ -170,9 +137,8 @@ def stock_buying(divider):
         pprint.pprint(resp)
 
 
-# 공황대응함수
 def crisis_activated():
-    print("임시 코드, 작성 예정")
+    print("임시 코드")
 
 
 
@@ -180,7 +146,6 @@ def crisis_activated():
 
 ### 실질 코드란
 
-# 메인함수
 if __name__=="__main__":
 
     while True:
@@ -199,6 +164,48 @@ if __name__=="__main__":
         # 상위 10개 기업 산출
         top10_stock_list_maker()
 
-        # 매수종목선정함수 실행 및 종목주문
+        # 매수종목선정함수 및 매수
         stock_buying(stock_selector())
-```
+
+        bullet = broker.fetch_present_balance()
+        pprint.pprint(bullet)
+
+        # 딜레이 조건 이곳에 입력
+        # code
+
+
+
+
+
+''' 메모
+
+# base	전일종가
+# pvol	전일 거래량
+# last	당일 조회시점의 현재가격
+# tvol	당일 조회시점까지의 전체 거래량
+# tamt	당일 조회시점까지의 전체 거래금액
+
+
+
+# 주문 코드
+resp = broker.create_limit_sell_order(
+symbol="APPL",
+price=30,
+quantity=1
+)
+
+pprint.pprint(resp)
+
+
+
+# pykis
+
+pykis
+https://github.com/pjueon/pykis
+
+
+
+# 데이터프레임 접근
+dataframe.iloc[i, 0]와 같이 행, 열 순이다.
+
+'''

@@ -95,7 +95,7 @@ def stock_selector():
     return divider
 
 
-# 종목매수함수
+# 매수주문함수
 def stock_buying(divider):
 
     info_fstock = broker.fetch_price(top10_stock_list[0])                       # 시총 1위 기업정보
@@ -156,5 +156,5 @@ if __name__=="__main__":
         # 상위 10개 기업 산출
         top10_stock_list_maker()
 
-        # 매수종목선정함수 및 매수
+        # 매수종목선정함수 실행 및 매수주문
         stock_buying(stock_selector())
