@@ -17,6 +17,8 @@
 - 한국투자증권에서 계좌를 개설합니다.
 - [한국투자증권 API(eFriend Expert)](https://www.truefriend.com/main/customer/systemdown/OpenAPI.jsp?cmd=TF04ea01200) 페이지에서 API 이용을 신청한 후, eFriend Expert 프로그램을 설치합니다.
 
+<br/>
+
 <h3>주의사항</h3>
 
 - 한국투자증권 계좌로 API를 신청한 후 APP Key, APP Secret를 발급받아 사용하며, 본 코드의 경우 별도의 mock.key 파일에서 정보를 읽어오도록 구성했습니다.
