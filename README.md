@@ -1,5 +1,6 @@
 <h1>ASTP : Auto Stock Trading Program</h1>
 
+|---|---|---|
 |헐|대박|쩐다|
 |미쳤다|대단하네|레전드|
 
