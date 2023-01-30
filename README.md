@@ -1,5 +1,14 @@
 <h1>ASTP : Auto Stock Trading Program</h1>
 
+<details>
+<summary>제목</summary>
+<div>
+
+내용
+
+</div>
+</details>
+
 <h3>특징</h3>
 
 - 특정한 매매전략을 구현하는 것이 목표로, 전략은 다음과 같습니다.
