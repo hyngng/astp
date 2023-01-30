@@ -3,7 +3,7 @@
 <details>
 <summary>일단어</summary>
 <div markdown = "1">
-
+<br/>
 |日本語|振り仮名|의미|
 |---|---|---|
 |国境|こっきょう|국경|
