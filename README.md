@@ -1,6 +1,6 @@
-<h1>ASTP : Auto Stock Trading Program</h1>
+# ASTP : Auto Stock Trading Program
 
-<h3>특징</h3>
+# 특징
 
 - 특정한 매매전략을 구현하는 것이 목표로, 전략은 다음과 같습니다.
     - NDX 지수와 NASDAQ 상장 1, 2위 기업의 비율을 고려하여 주식을 매수합니다.
@@ -11,14 +11,14 @@
 
 ---
 
-<h3>사전작업</h3>
+# 사전작업
 
 - 한국투자증권에서 계좌를 개설합니다.
 - [한국투자증권 API(eFriend Expert)](https://www.truefriend.com/main/customer/systemdown/OpenAPI.jsp?cmd=TF04ea01200) 페이지에서 API 이용을 신청한 후, eFriend Expert 프로그램을 설치합니다.
 
-<br/>
+<br>
 
-<h3>주의사항</h3>
+# 주의사항
 
 - 한국투자증권 계좌로 API를 신청한 후 APP Key, APP Secret를 발급받아 사용하며, 본 코드의 경우 별도의 mock.key 파일에서 정보를 읽어오도록 구성했습니다.
 - 공동인증서 모듈이 64bit를 미지원하는 이슈가 있기 때문에, 코드를 정상적으로 실행하기 위해서는 32bit 가상환경을 구축할 필요가 있습니다. 자세한 것은 [이곳]()을 참조할 수 있습니다.
@@ -26,7 +26,7 @@
 
 ---
 
-<h3>예정된 작업</h3>
+# 예정된 작업
 
 - FinanceDataReader 라이브러리 없이 코드가 동작 가능하도록 하는 변경이 예정에 있습니다.
 - 디스코드 알림 함수가 작성 예정에 있습니다.
@@ -35,15 +35,15 @@
 - 클래스 작성 및 함수 유형화를 염두해두고 있습니다.
 - Android Studio를 통한 안드로이드 어플리케이션 제작이 예정되어 있습니다.
 
-<br/><br/><br/><br/>
+<br><br><br><br>
 
 ---
 
-<h3>예시 동작</h3>
+# 예시 동작
 
 ![ASTP_example](https://user-images.githubusercontent.com/96360829/210502904-533a39e2-56d7-4b06-9005-06be482e351b.png)
 
-<h3>코드</h3>
+# 코드
  
 ```python
 import mojito
