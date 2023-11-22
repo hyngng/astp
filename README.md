@@ -1,6 +1,6 @@
 # ASTP : Auto Stock Trading Program
 
-# 특징
+### 특징
 
 - 특정한 매매전략을 구현하는 것이 목표로, 전략은 다음과 같습니다.
     - NDX 지수와 NASDAQ 상장 1, 2위 기업의 비율을 고려하여 주식을 매수합니다.
@@ -9,24 +9,24 @@
 - [Yahoo Finance](https://finance.yahoo.com/quote/NQ=F?p=NQ=F&.tsrc=fin-srch) 크롤링을 통해 NDX 지수를 활용합니다.
 - <i>Designed by <b>파양(PAYANG)</b></i>
 
----
+<br>
 
-# 사전작업
+### 사전작업
 
 - 한국투자증권에서 계좌를 개설합니다.
 - [한국투자증권 API(eFriend Expert)](https://www.truefriend.com/main/customer/systemdown/OpenAPI.jsp?cmd=TF04ea01200) 페이지에서 API 이용을 신청한 후, eFriend Expert 프로그램을 설치합니다.
 
 <br>
 
-# 주의사항
+### 주의사항
 
 - 한국투자증권 계좌로 API를 신청한 후 APP Key, APP Secret를 발급받아 사용하며, 본 코드의 경우 별도의 mock.key 파일에서 정보를 읽어오도록 구성했습니다.
 - 공동인증서 모듈이 64bit를 미지원하는 이슈가 있기 때문에, 코드를 정상적으로 실행하기 위해서는 32bit 가상환경을 구축할 필요가 있습니다. 자세한 것은 [이곳]()을 참조할 수 있습니다.
 - 미국 장은 한국시간으로 밤 11:30부터 다음날 아침 6:30까지 열리기 때문에, 일반적인 경우와 달리 ASTP는 코드 동작을 확인할 수 있는 시간에 강한 제약이 있습니다.
 
----
+<br>
 
-# 예정된 작업
+### 예정된 작업
 
 - FinanceDataReader 라이브러리 없이 코드가 동작 가능하도록 변경.
 - 출력물 앞에 [2022-02-22-22:22:22]와 안내문 출력 시간대 표시
@@ -36,15 +36,17 @@
 - 클래스 작성 및 함수 유형화
 - Android Studio를 통한 안드로이드 어플리케이션 빌드
 
-<br><br><br><br>
+<br>
+<br>
+<br>
+<br>
+<br>
 
----
-
-# 예시 동작
+### 예시 동작
 
 ![ASTP_example](https://user-images.githubusercontent.com/96360829/210502904-533a39e2-56d7-4b06-9005-06be482e351b.png)
 
-# 코드
+### 코드
  
 ```python
 import mojito
