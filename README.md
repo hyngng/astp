@@ -1,4 +1,4 @@
-# ASTP : Auto Stock Trading Program
+# **ASTP : Auto Stock Trading Program**
 
 ### 특징
 
@@ -18,5 +18,7 @@
 - 매수 한도와 매도 조건 추가
 - 클래스 작성 및 함수 유형화
 - Android Studio를 통한 안드로이드 어플리케이션 빌드
+
+<br>
 
 더 자세한 사항은 [여기](https://kiw6024.github.io/posts/ASTP/)에서 확인하실 수 있습니다.
