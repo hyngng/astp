@@ -1,4 +1,4 @@
-# **ASTP : Auto Stock Trading Program**
+# **Auto Stock Trading Program**
 
 ### 특징
 
