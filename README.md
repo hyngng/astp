@@ -21,4 +21,4 @@
 
 <br>
 
-더 자세한 사항은 [여기](https://kiw6024.github.io/posts/ASTP/)에서 확인하실 수 있습니다.
+더 자세한 사항은 [여기](https://hynrng.github.io/posts/ASTP/)에서 확인하실 수 있습니다.
