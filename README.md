@@ -7,7 +7,7 @@
     - NDX 지수가 폭락하거나, 환율이 과도하게 상승하는 등의 상황에서 보유주식을 전량 매도하고 20영업일간 매매활동을 중지합니다.  
 - 파이썬과 한국투자증권이 배포하는 Open API를 사용합니다.
 - [Yahoo Finance](https://finance.yahoo.com/quote/NQ=F?p=NQ=F&.tsrc=fin-srch) 크롤링을 통해 NDX 지수를 활용합니다.
-- <i>Designed by <b>파양(PAYANG)</b></i>
+- <i>Designed with <b>PAYANG</b></i>
 
 ### 개선 가능한 사항
 
