@@ -21,4 +21,4 @@
 
 <br>
 
-더 자세한 사항은 [여기](https://hyngng.github.io/posts/lavad/)에서 확인하실 수 있습니다.
+더 자세한 사항은 [여기](https://hyngng.github.io/posts/astp/)에서 확인하실 수 있습니다.
