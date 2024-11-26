@@ -21,4 +21,4 @@
 
 <br>
 
-- More details can be found **[here](https://hyngng.github.io/posts/astp/)**.
+- More details can be found **[here (written in Korean)](https://hyngng.github.io/posts/astp/)**.
