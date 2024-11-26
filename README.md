@@ -1,6 +1,6 @@
 # **Auto Stock Trading Program**
 
-If you don't know Korean, **[English support](https://github.com/hyngng/astp/blob/master/README-en.md)** is here.
+**If you don't know Korean, [English support](https://github.com/hyngng/astp/blob/master/README-en.md) is here.**
 
 ### **특징**
 
