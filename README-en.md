@@ -6,7 +6,7 @@
     - Buy stocks based on the ratio of the NDX index to the top 1st and 2nd companies listed on NASDAQ.
     - Sell all held stocks and stop trading for 20 business days if the NDX index crashes or if there is excessive currency fluctuation.
 - Python is used along with the Open API provided by Korea Investment & Securities.
-- The NDX index is utilized through Yahoo Finance crawling.
+- The NDX index is utilized through [Yahoo Finance](https://finance.yahoo.com/quote/NQ=F?p=NQ=F&.tsrc=fin-srch) crawling.
 - _Designed with **PAYANG**._
 
 ### **Areas for Improvement**
@@ -21,4 +21,4 @@
 
 <br>
 
-- More details can be found [here](https://hyngng.github.io/posts/astp/).
+- More details can be found **[here](https://hyngng.github.io/posts/astp/)**.
