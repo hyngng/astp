@@ -1,5 +1,7 @@
 ## **Auto Stock Trading Program**
 
+**[Korean](https://github.com/hyngng/astp?tab=readme-ov-file)** | **[English](https://github.com/hyngng/astp/blob/master/README-en.md)**
+
 ### **Features**
 
 - The goal is to implement a specific trading strategy, which is as follows:
