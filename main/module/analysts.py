@@ -1,6 +1,8 @@
-from pykis import PyKis, KisQuote
+from pykis import KisQuote
 
 class Analyst:
+    ''' 분석가: 차트분석 통해 매도&매수주문을 의뢰하는 클래스
+    '''
     def __init__(self, kis):
         self.kis = kis
 
@@ -8,7 +10,7 @@ class Analyst:
     def get_stock_quote(self, ticker):
         ''' 엔비디아의 상품 객체를 가져옵니다.
 
-        ticker -- "AAPL"와 같은 기업 심볼
+        ticker -- 티커 심볼. "AAPL"처럼 입력바람.
         '''
         stock = self.kis.stock(ticker)
 
