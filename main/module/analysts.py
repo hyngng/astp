@@ -1,4 +1,5 @@
 from pykis import KisQuote
+import yfinance
 
 class Analyst:
     ''' 분석가: 차트분석 통해 매도&매수주문을 의뢰하는 클래스
@@ -13,8 +14,11 @@ class Analyst:
         ticker -- 티커 심볼. "AAPL"처럼 입력바람.
         '''
         stock = self.kis.stock(ticker)
-
         quote: KisQuote = stock.quote()
-        quote: KisQuote = stock.quote(extended=True) # 주간거래 시세
 
-        print(quote)
+        return quote
+
+    def generate_recommendations(self):
+        recommendations = []
+        # recommendations.append()
+        return recommendations

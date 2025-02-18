@@ -10,9 +10,11 @@
 
 **사용 라이브러리**
 
-| 라이브러리명 | 역할 |
-| [python-kis](https://github.com/Soju06/python-kis) | 한국투자증권이 제공하는 매수&매도용 라이브러리 |
-|  |  |
+| 라이브러리명 | 역할 | 비고 |
+| [python-kis](https://github.com/Soju06/python-kis)[^1] | 매수&매도주문을 요청하기 위함. | 한국투자증권이 제공. |
+| yfinance | MACD와 같은 주식 보조 지표를 얻기 위함. | 야후 파이낸스 |
+
+[^1]: 티커 심볼을 입력받아 _거래량, 거래대금, 시가총액, EPS, BPS, PER, PBR, 52주 최고가, 52주 최저가, 시가, 고가, 저가, 종가, 변동폭_을 제공받을 수 있음.
 
 ### 클래스 구조
 
@@ -26,7 +28,7 @@
 
 - 모의투자 API를 직접 생성할 때 모의투자에 더불어 실전투자의 `app_key`와 `app_secret`가 함께 필요함
     - YAML을 이용하여 불러오려 했더니 이런 문제가 있었음
-    - [이곳](https://github.com/Soju06/python-kis/issues/39) 참고바람
+    - 자세한 사항은 [이곳](https://github.com/Soju06/python-kis/issues/39) 참고바람
 
 ## 참고
 
