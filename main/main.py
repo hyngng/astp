@@ -1,8 +1,8 @@
-from pykis import KisAuth
+from pykis import PyKis
 import yaml
 
-from module.analyst import Analyst
-from module.leader import Leader
+from module.analysts import Analyst
+from module.traders import Trader
 
 #region variables
 config = None
@@ -10,20 +10,21 @@ config = None
 
 def init():
     ''' ASTP의 기본 동작여건을 설정하는 함수 '''
-    macd_analyst = Analyst()
-
     with open('data/config.yaml', 'r', encoding='utf-8') as file:
         config = yaml.safe_load(file)
 
-    auth = KisAuth(
-        id=config["id"],
-        appkey=config["app_key"],
-        secretkey=config["app_secret"],
-        account=config["account"],
-        virtual=True,
+    kis = PyKis(
+        id                = config["id"],
+        account           = config["account"],
+        appkey            = # 
+        secretkey         = #
+        virtual_id        = config["id"],
+        virtual_appkey    = config["virtual_app_key"],
+        virtual_secretkey = config["virtual_app_secret"],
+        keep_token=True,
     )
 
-    auth.save("secret.json")
+    macd_analyst = Analyst(kis)
 
 def main():
     init()
