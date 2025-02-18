@@ -1,6 +1,6 @@
-## **Auto Stock Trading Program**
+## **Auto Stock Trading Program (2022)**
 
-**[Korean](https://github.com/hyngng/astp?tab=readme-ov-file)** | **[English](https://github.com/hyngng/astp/blob/master/README-en.md)**
+**[Korean](https://github.com/hyngng/astp/blob/legacy/README.md)** | **[English](https://github.com/hyngng/astp/blob/legacy/README-en.md)**
 
 ### **Features**
 
