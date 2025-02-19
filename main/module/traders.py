@@ -36,6 +36,6 @@ class Trader:
     
     def submit_order(ticker):
         # 주문
-        # order: KisOrder = hynix.buy(price=194700, qty=1)
+        # order = hynix.buy(price=194700, qty=1)
 
         pass

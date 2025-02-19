@@ -19,9 +19,9 @@
 
 `main.py` 또는 `traders.py`에서 관리하는 `watchlist: list`
 
-### 클래스 구조
+**클래스 구조**
 
-**크게 두 가지 유형의 클래스로 작동함**
+> 크게 두 가지 유형의 클래스로 작동함
 
 - `Leader`: 상위 라이브러리로서 매수&매도주문을 올림
     - 큐 자료형에 등록된 모든 주문을 일정시간마다 처리함
@@ -41,5 +41,6 @@
 
 - [한국투자 OpenAPI 문서(공식)](https://apiportal.koreainvestment.com/apiservice/oauth2#L_5c87ba63-740a-4166-93ac-803510bb9c02)
 - [MACD 지표의 python 코드 작성 (Pandas library and Dictionary)](https://pioneergu.github.io/posts/macd-code/#%EC%8B%A4%EC%8B%9C%EA%B0%84-macd-%EC%A7%80%ED%91%9C-%EB%AA%A8%EC%9D%98-%EA%B3%84%EC%82%B0)
+- [파이썬으로 MACD 지표 구축](https://medium.com/@financial_python/building-a-macd-indicator-in-python-190b2a4c1777)
 
 [^1]: 티커 심볼을 입력받아 거래량, 거래대금, 시가총액, EPS, BPS, PER, PBR, 52주 최고가, 52주 최저가, 시가, 고가, 저가, 종가, 변동폭을 제공받을 수 있음.

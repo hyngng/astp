@@ -34,7 +34,13 @@ def init():
 
     # print(trader.get_balance())
     # print(macd_analyst.get_stock_quote("MSFT"))
-    print(macd_analyst.get_macd())
+
+    # 상위 10개 기업에 대해 MACD 알아내기
+    # corps = [상위 10개]
+    # for corp in corps:
+    #     print(macd_analyst.get_macd(corp)
+
+    macd_analyst.get_nasdaq_100()
 
 def main():
     init()
