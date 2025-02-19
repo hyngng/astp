@@ -34,6 +34,7 @@ class Analyst:
 class MACD_Analyst(Analyst):
     def get_macd():
         ''' MACD를 구하는 함수. 하루에 한 번, 장 종료 시점에 구함.
+        KisIntegrationBalance
         '''
         pass
 

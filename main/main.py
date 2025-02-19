@@ -1,4 +1,4 @@
-from pykis import PyKis, KisBalance
+from pykis import PyKis
 import yaml
 
 from module.analysts import Analyst
@@ -32,7 +32,7 @@ def init():
     trader       = Trader(kis)
     macd_analyst = Analyst(kis)
 
-    trader.get_trading_hours()
+    print(trader.get_balance())
     # print(macd_analyst.get_stock_quote("MSFT"))
 
 def main():
@@ -40,7 +40,6 @@ def main():
 
     # while문 안에 넣을거
     # macd_analyst.generate_recommendations()
-
 
     # while True:
         # 잔고조회

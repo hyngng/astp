@@ -10,25 +10,28 @@ class Trader:
         self.watchlist = []
     
     def get_trading_hours(self):
+        ''' 현재 미국 장이 열려있는지 확인하는 함수.
+
+        returns:
+            bool: 미국 장이 열려있는지.
+        '''
         opening_time = self.kis.trading_hours("US").open_kst
         closing_time = self.kis.trading_hours("US").close_kst
         now          = datetime.datetime.now().time()
 
         is_open = True
-
         if closing_time < now < opening_time:
             is_open = False
-
         return is_open
 
-        print(now)
-        print(self.kis.trading_hours("US").open_kst)
-        print(self.kis.trading_hours("US").close_kst)
-
     def get_balance(self):
+        ''' 내 계좌 잔고 확인하는 함수.
+        returns:
+            
+        '''
         account = self.kis.account()
         balance: KisBalance = account.balance()
-        print(repr(balance))
+        return repr(balance)
     
     def submit_order(ticker):
         # 주문
