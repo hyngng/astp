@@ -33,10 +33,6 @@
     - YAML을 이용하여 불러오려 했더니 이런 문제가 있었음
     - 자세한 사항은 [이곳](https://github.com/Soju06/python-kis/issues/39) 참고바람
 
-## 고민거리
-
-잠자리가 불안해지지 않을까?
-
 ## 참고
 
 - [한국투자 OpenAPI 문서(공식)](https://apiportal.koreainvestment.com/apiservice/oauth2#L_5c87ba63-740a-4166-93ac-803510bb9c02)
