@@ -1,8 +1,8 @@
 from pykis import PyKis
 import yaml
 
-from module.analysts import Analyst
-from module.traders import Trader
+from module.analysts import *
+from module.traders import *
 
 #region variables
 config       = None
@@ -30,10 +30,11 @@ def init():
     )
 
     trader       = Trader(kis)
-    macd_analyst = Analyst(kis)
+    macd_analyst = MACD_Analyst(kis)
 
-    print(trader.get_balance())
+    # print(trader.get_balance())
     # print(macd_analyst.get_stock_quote("MSFT"))
+    print(macd_analyst.get_macd())
 
 def main():
     init()
@@ -44,7 +45,7 @@ def main():
     # while True:
         # 잔고조회
         # trader.get_balance()
-        # time.sleep()
+        # time.sleep(config["system"]["operating_cycle"])
 
 if __name__ == "__main__":
     main()

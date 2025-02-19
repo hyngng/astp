@@ -26,8 +26,9 @@ class Trader:
 
     def get_balance(self):
         ''' 내 계좌 잔고 확인하는 함수.
+        
         returns:
-            
+            KisIntegrationBalance: 예수금, 보유종목 등 내 계좌에 대한 정보
         '''
         account = self.kis.account()
         balance: KisBalance = account.balance()
