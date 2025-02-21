@@ -1,4 +1,5 @@
 from pykis import KisQuote, KisStock
+from yahooquery import Ticker
 import yfinance
 import pandas
 
@@ -24,16 +25,8 @@ class Analyst:
         return quote
 
     def get_nasdaq_100(self):
-        # 나스닥 100 지수 티커: ^NDX
-
-        qqq = yfinance.Ticker('QQQ')
-    
-        # QQQ의 holdings 정보를 가져옵니다 (상장된 종목 목록)
-        holdings = qqq.get_holdings()
-
-        # holdings에서 tickers만 추출
-        tickers = [holding['symbol'] for holding in holdings['components']]
-        print(tickers)
+        etf_constituents = ticker.fund_holding
+        print(etf_constituents)
 
     def generate_recommendations(self):
         ''' 추천 종목을 발생시키는 함수.
@@ -53,7 +46,7 @@ class MACD_Analyst(Analyst):
         ''' MACD를 구하는 함수. 하루에 한 번, 장 종료 시점에 구함.
 
         returns:
-            pandas.core.frame.DataFrame: 
+            pandas.core.frame.DataFrame:
         '''
         data = yfinance.Ticker(ticker).history(period= "60d" , interval= "1h" )
 
