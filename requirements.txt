@@ -1,3 +1,5 @@
 tzdata
 typing_extensions
 python-kis
+yfinance
+pandas

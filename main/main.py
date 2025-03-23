@@ -1,21 +1,24 @@
 from pykis import PyKis
 import yaml
+import logging
 
 from module.analysts import *
 from module.traders import *
 
 #region variables
-config       = None
+config           = None
 
-trader       = None
-macd_analyst = None
+trader           = None
+macd_analyst     = None
 #endregion variables
 
 def init():
     ''' ASTP의 기본 동작여건을 설정하는 함수.
     '''
+    global config, trader, macd_analyst
+
     config = yaml.safe_load(
-        open('../data/config.yaml', 'r', encoding='utf-8')
+        open('data/config.yaml', 'r', encoding='utf-8')
     )
 
     kis = PyKis(
@@ -29,18 +32,25 @@ def init():
         keep_token        = True,
     )
 
-    trader       = Trader(kis)
-    macd_analyst = MACD_Analyst(kis)
+    trader       = Trader(kis, config)
+    macd_analyst = MACD_Analyst(kis, config)
 
-    # print(trader.get_balance())
-    # print(macd_analyst.get_stock_quote("MSFT"))
+    # 종목 목록 가져오기
+    tickers = []
+    if config["companies_settings"]["auto_fetch"]:
+        logging.info("나스닥 100 기업 목록을 자동으로 가져오는 중...")
+        tickers = Analyst.get_nasdaq_top_100()
+    else:
+        tickers = config["companies_settings"]["manual_tickers"]
 
-    # 상위 10개 기업에 대해 MACD 알아내기
-    # corps = [상위 10개]
-    # for corp in corps:
-    #     print(macd_analyst.get_macd(corp)
-
-    macd_analyst.get_nasdaq_100()
+    # MACD 분석 실행
+    for ticker in tickers:
+        success, result = macd_analyst.get_macd(ticker)
+        if success:
+            if result['signal'] != 'NO_SIGNAL':
+                logging.info(f"{ticker}: {result['signal']} 발생 (MACD: {result['macd_value']:.4f}, Signal: {result['signal_value']:.4f})")
+        else:
+            logging.error(f"{ticker}: {result['error']}")
 
 def main():
     init()
