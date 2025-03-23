@@ -6,6 +6,8 @@ ASTP는 한국투자증권(KIS) API를 통해 미국 주식을 자동으로 분�
 
 ## 사용 방법
 
+> Pythonanywhere에서는 `cd ~/astp && python main/main.py`로 실행 가능!
+
 ### 설치
 
 ```bash
@@ -187,3 +189,51 @@ ASTP는 두 가지 주요 분석 전략을 사용합니다:
 - 실제 투자 전 충분한 모의투자 테스트를 권장합니다.
 - KIS API 키는 안전하게 보관하고 공개하지 마세요.
 - 서버에서 운영 시 충분한 보안 조치를 취하세요.
+
+## 보안 설정 및 실행 방법
+
+### API 키 보안 관리
+
+ASTP는 한국투자증권 API 키를 안전하게 관리하기 위한 여러 방법을 제공합니다:
+
+1. **환경 변수 사용**: API 키를 환경 변수로 설정하여 코드에서 직접 참조하지 않습니다.
+2. **설정 파일 템플릿**: `data/config_template.yaml`을 사용하여 환경 변수 참조 방식으로 설정 파일을 관리합니다.
+
+### 파이썬 실행 스크립트 사용
+
+제공된 `run_astp.py` 스크립트를 사용하여 프로그램을 실행할 수 있습니다:
+
+1. 스크립트 내의 API 키 정보 수정:
+   ```python
+   # run_astp.py 파일 내에서
+   api_keys = {
+       "KIS_ID": "실제_ID",
+       "KIS_APP_KEY": "실제_앱키",
+       # 나머지 키 정보
+   }
+   ```
+
+2. 스크립트 실행:
+   ```bash
+   python run_astp.py
+   ```
+
+### PythonAnywhere에서의 보안 설정
+
+PythonAnywhere에서 ASTP를 실행할 때 다음과 같은 방법으로 API 키를 안전하게 관리할 수 있습니다:
+
+1. **시스템 환경 변수 설정**:
+   ```bash
+   # PythonAnywhere의 Bash 콘솔에서
+   echo 'export KIS_ID="your_id"' >> ~/.bashrc
+   echo 'export KIS_APP_KEY="your_app_key"' >> ~/.bashrc
+   # 나머지 키도 동일하게 설정
+   source ~/.bashrc
+   ```
+
+2. **Always-on 작업 설정**:
+   - PythonAnywhere의 "Tasks" 탭에서 "Add a new scheduled task" 선택
+   - 다음 명령어 입력: `cd ~/astp && python run_astp.py`
+   - "Always on" 또는 원하는 일정으로 설정
+
+이러한 방법을 통해 API 키가 코드에 직접 포함되지 않아 보안을 강화할 수 있습니다.
