@@ -2,6 +2,7 @@ name: Run Python Every Hour
 on:
   schedule:
     - cron: "0 * * * *"  # 매 정각마다 실행 (UTC 기준)
+  workflow_dispatch:     # 수동 실행 트리거 추가
 jobs:
   run-script:
     runs-on: ubuntu-latest
@@ -15,4 +16,4 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt || echo "No dependencies"
       - name: Run Python Script
-        run: python main/main.py    # 경로 수정
+        run: python main/main.py
