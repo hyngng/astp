@@ -1,42 +1,189 @@
-## ASTP (2025)
+# ASTP
 
-- 로보어드바이저(RA) 프로그램
+> 자동 주식 트레이딩 프로그램(Automated Stock Trading Program)으로, MACD와 TBM 전략을 활용한 알고리즘 기반 매매 시스템입니다.
 
-## 기술사항
+ASTP는 한국투자증권(KIS) API를 통해 미국 주식을 자동으로 분석하고 매매하는 프로그램입니다. MACD 분석과 TBM(Trend-Bollinger-MACD) 전략을 기반으로 매수/매도 신호를 감지하고, 설정에 따라 자동으로 주문을 실행합니다. 실제 계좌와 모의투자 모드를 지원하여 안전하게 전략을 테스트할 수 있습니다.
 
-**사용 라이브러리**
+## 사용 방법
 
-| 라이브러리명 | 역할 | 비고 |
-| --- | --- | --- |
-| [python-kis](https://github.com/Soju06/python-kis)[^1] | 매수&매도주문을 요청하기 위함. | 한국투자증권이 제공. |
-| yfinance | MACD와 같은 주식 보조 지표를 얻기 위함. | pandas를 필수적으로 요구함. |
+### 설치
 
-**알고리즘**
+```bash
+# 저장소 클론
+git clone https://github.com/your-username/astp.git
+cd astp
 
-> 차후 memrmaid로 포팅할 계획
+# 필요 패키지 설치
+pip install -r requirements.txt
+```
 
-나스닥 상위 10개 기업에 대해 금일 MACD 구하기, 일정 기준 이상이면 매수하기.
+### 설정
 
-`main.py` 또는 `traders.py`에서 관리하는 `watchlist: list`
+1. `data/config.yaml` 파일에서 필요한 설정을 수정합니다:
 
-**클래스 구조**
+```yaml
+api_info:
+  id: "YOUR_ID"
+  account: "YOUR_ACCOUNT"
+  app_key: "YOUR_APP_KEY"
+  app_secret: "YOUR_APP_SECRET"
+  virtual_app_key: "YOUR_VIRTUAL_APP_KEY"
+  virtual_app_secret: "YOUR_VIRTUAL_APP_SECRET"
+  is_virtual: true  # 모의투자 모드 활성화 여부
+```
 
-> 크게 두 가지 유형의 클래스로 작동함
+2. 자동 매매 설정:
 
-- `Leader`: 상위 라이브러리로서 매수&매도주문을 올림
-    - 큐 자료형에 등록된 모든 주문을 일정시간마다 처리함
-- `Analyst`: 하위 라이브러리로서 차트를 분석하고 매수&매도주문을 큐에 등록함
+```yaml
+trading_settings:
+  auto_trading_enabled: false  # 자동 매매 활성화 여부
+  stop_loss_threshold: -7.0    # 손절 기준 손실률 (%)
+  take_profit_threshold: 20.0  # 익절 기준 수익률 (%)
+  max_holding_days: 30         # 최대 보유 기간 (일)
+  max_buy_stocks: 3            # 한 번에 최대로 매수할 종목 수
+  budget_percentage: 30        # 사용 가능 자금 중 한 번에 사용할 비율 (%)
+  risk_level: 2                # TBM 전략의 위험 수준 (1-보수적, 2-중간, 3-공격적)
+  virtual_balance: 100000000   # 모의투자 모드에서 사용할 가상 잔고 (원)
+```
 
-## 유의사항
+### 실행
 
-- 모의투자 API를 직접 생성할 때 모의투자에 더불어 실전투자의 `app_key`와 `app_secret`가 함께 필요함
-    - YAML을 이용하여 불러오려 했더니 이런 문제가 있었음
-    - 자세한 사항은 [이곳](https://github.com/Soju06/python-kis/issues/39) 참고바람
+```bash
+python main.py
+```
 
-## 참고
+## 작동 방식
 
-- [한국투자 OpenAPI 문서(공식)](https://apiportal.koreainvestment.com/apiservice/oauth2#L_5c87ba63-740a-4166-93ac-803510bb9c02)
-- [MACD 지표의 python 코드 작성 (Pandas library and Dictionary)](https://pioneergu.github.io/posts/macd-code/#%EC%8B%A4%EC%8B%9C%EA%B0%84-macd-%EC%A7%80%ED%91%9C-%EB%AA%A8%EC%9D%98-%EA%B3%84%EC%82%B0)
-- [파이썬으로 MACD 지표 구축](https://medium.com/@financial_python/building-a-macd-indicator-in-python-190b2a4c1777)
+```mermaid
+flowchart TD
+    Start[프로그램 시작] --> LoadConfig[설정 파일 로드]
+    LoadConfig --> InitKIS[KIS API 연결 및 초기화]
+    InitKIS --> InitAnalysts[분석기 및 트레이더 초기화]
+    InitAnalysts --> FetchTickers[분석 대상 종목 가져오기]
+    FetchTickers --> CycleStart[운영 사이클 시작]
+    
+    subgraph 운영_사이클["1시간 주기 실행"]
+        CycleStart --> CheckVirtual{모의투자 모드?}
+        CheckVirtual -->|예| UseVirtual[가상 잔고 사용]
+        CheckVirtual -->|아니오| GetBalance[실제 계좌 잔고 확인]
+        UseVirtual --> AnalyzeTickersStart[종목 분석 시작]
+        GetBalance --> AnalyzeTickersStart
+        
+        subgraph 종목_분석["MACD 및 TBM 분석"]
+            AnalyzeTickersStart --> MACDAnalysis[MACD 분석]
+            MACDAnalysis --> CalcShortEMA["단기 EMA 계산<br>(12일)"]
+            CalcShortEMA --> CalcLongEMA["장기 EMA 계산<br>(26일)"]
+            CalcLongEMA --> CalcMACD["MACD 계산<br>(단기 EMA - 장기 EMA)"]
+            CalcMACD --> CalcSignal["시그널 라인 계산<br>(MACD의 9일 EMA)"]
+            CalcSignal --> CheckCross{크로스 발생?}
+            CheckCross -->|골든크로스| GoldenCross[매수 신호]
+            CheckCross -->|데드크로스| DeadCross[매도 신호]
+            CheckCross -->|신호 없음| NoSignal[홀딩 유지]
+            
+            MACDAnalysis --> TBMAnalysis[TBM 전략 분석]
+            TBMAnalysis --> CheckTrend["추세 분석<br>(이동평균선)"]
+            CheckTrend --> CheckBollinger["볼린저 밴드 분석<br>(변동성)"]
+            CheckBollinger --> CheckMACDTBM["MACD 확인<br>(모멘텀)"]
+            CheckMACDTBM --> CalcTBMScore[종합 점수 계산]
+            CalcTBMScore --> TBMSignal{TBM 신호?}
+            TBMSignal -->|BUY| TBMBuy[매수 추천]
+            TBMSignal -->|SELL| TBMSell[매도 추천]
+            TBMSignal -->|HOLD| TBMHold[홀딩 추천]
+        end
+        
+        AnalyzeTickersStart --> CheckSellConditions[매도 조건 확인]
+        
+        subgraph 매도_프로세스["매도 조건 및 실행"]
+            CheckSellConditions --> StopLoss{"손절점 도달?<br>(-7%)"}
+            CheckSellConditions --> TakeProfit{"익절점 도달?<br>(+20%)"}
+            CheckSellConditions --> SellSignal{매도 신호?}
+            CheckSellConditions --> HoldingPeriod{"홀딩 기간 초과?<br>(30일)"}
+            
+            StopLoss -->|예| SellDecision[매도 결정]
+            TakeProfit -->|예| SellDecision
+            SellSignal -->|예| SellDecision
+            HoldingPeriod -->|예| SellDecision
+            
+            SellDecision --> ExecuteSell[매도 주문 실행]
+        end
+        
+        CheckSellConditions --> GetBuyRecommendations[매수 추천 종목 확인]
+        
+        subgraph 매수_프로세스["매수 조건 및 실행"]
+            GetBuyRecommendations --> SortRecommendations[추천 종목 점수 기반 정렬]
+            SortRecommendations --> SelectTopStocks["상위 N개 종목 선택<br>(기본값: 3)"]
+            SelectTopStocks --> CalcBudget["매수 예산 계산<br>(잔고의 30%)"]
+            CalcBudget --> ExecuteBuy[매수 주문 실행]
+        end
+        
+        ExecuteSell --> LogResults[결과 로깅]
+        ExecuteBuy --> LogResults
+        LogResults --> WaitCycle["설정된 시간만큼 대기<br>(기본값: 1시간)"]
+        WaitCycle --> CycleStart
+    end
+```
 
-[^1]: 티커 심볼을 입력받아 거래량, 거래대금, 시가총액, EPS, BPS, PER, PBR, 52주 최고가, 52주 최저가, 시가, 고가, 저가, 종가, 변동폭을 제공받을 수 있음.
+### 분석 프로세스
+
+ASTP는 두 가지 주요 분석 전략을 사용합니다:
+
+1. **MACD 분석**: 단기 및 장기 지수이동평균의 차이를 계산하여 골든크로스와 데드크로스를 식별합니다.
+2. **TBM 전략**: 트렌드, 볼린저 밴드, MACD를 결합한 복합 분석 방법으로 매수/매도 신호의 정확도를 높입니다.
+
+## 주요 기능
+
+### 자동 매매
+
+- 설정된 주기(기본 1시간)마다 자동으로 분석 및 매매 실행
+- NASDAQ 100 기업 자동 추적 또는 수동 종목 설정 가능
+- 매수/매도 조건 사용자 정의 가능
+
+### 매도 조건
+
+- **손절점**: 설정된 손실률 도달 시 자동 매도
+- **익절점**: 설정된 수익률 도달 시 자동 매도
+- **TBM 매도 신호**: 전략 분석 결과 매도 신호 발생 시
+- **홀딩 기간 초과**: 최대 보유 기간 초과 시 매도
+
+### 모의투자 모드
+
+- 실제 자금 투입 없이 전략 테스트 가능
+- 가상 잔고를 통한 거래 시뮬레이션
+- 실제 시장 데이터 기반 분석
+
+## 설정 상세 설명
+
+### system
+- `operating_cycle`: 분석 및 매매 실행 주기 (초 단위)
+
+### macd_settings
+- `period`: 데이터 조회 기간
+- `interval`: 데이터 조회 간격
+- `ema_short`: 단기 지수이동평균 기간
+- `ema_long`: 장기 지수이동평균 기간
+- `signal_period`: 시그널 라인 계산 기간
+
+### trading_settings
+- `auto_trading_enabled`: 자동 매매 활성화 여부
+- `stop_loss_threshold`: 손절 기준 손실률 (%)
+- `take_profit_threshold`: 익절 기준 수익률 (%)
+- `max_holding_days`: 최대 보유 기간 (일)
+- `max_buy_stocks`: 한 번에 최대로 매수할 종목 수
+- `budget_percentage`: 사용 가능 자금 중 한 번에 사용할 비율 (%)
+- `risk_level`: TBM 전략의 위험 수준
+- `virtual_balance`: 모의투자 모드에서 사용할 가상 잔고 (원)
+
+## 로깅
+
+프로그램은 모든 활동을 로그로 기록합니다:
+- 분석 시작 시간
+- 매수/매도 시그널 감지
+- 주문 실행 결과
+- 오류 및 예외 상황
+
+## 주의사항
+
+- 이 프로그램은 투자 결과를 보장하지 않습니다.
+- 실제 투자 전 충분한 모의투자 테스트를 권장합니다.
+- KIS API 키는 안전하게 보관하고 공개하지 마세요.
+- 서버에서 운영 시 충분한 보안 조치를 취하세요.

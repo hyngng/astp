@@ -1,1 +1,63 @@
-data/config.yaml
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 가상 환경
+venv/
+ENV/
+env/
+.env
+.venv
+
+# IDE 및 편집기 파일
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# 로그 파일
+*.log
+logs/
+*.out
+
+# 보안 관련 파일 - 실제 API 키 포함된 파일
+/data/config.yaml
+/data/config_real.yaml
+/data/config_*.yaml
+run_astp_prod.sh
+*.pem
+*.key
+secure_keys.py
+.env
+
+# 임시 파일
+*.tmp
+temp/
+.cache/
+
+# 데이터베이스
+*.db
+*.sqlite
+*.sqlite3
+
+# PythonAnywhere 관련
+*.wsgi
