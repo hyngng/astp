@@ -1,10 +1,8 @@
-from pykis import KisQuote, KisStock
+from pykis import KisQuote
 import yfinance
 import pandas as pd
 from typing import Optional, Tuple, Dict, List
 import logging
-import requests
-from bs4 import BeautifulSoup
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)

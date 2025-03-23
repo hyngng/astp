@@ -1,7 +1,7 @@
-from pykis import KisTradingHours, KisBalance
+from pykis import KisBalance
 from datetime import datetime
 import logging
-from typing import Dict, List, Tuple, Optional, Union
+from typing import Dict, List, Tuple, Optional
 from module.analysts import TBM_Strategy
 
 class Trader:

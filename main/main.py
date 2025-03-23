@@ -1,19 +1,14 @@
 from pykis import PyKis
-import yaml
 import logging
-import time
-from datetime import datetime
-import os
-import sys
+import time as time_module  # time 모듈 이름 변경
+from datetime import datetime, timedelta, time as datetime_time  # time 클래스 이름 변경
 
 from module.analysts import *
 from module.traders import *
-from main.module.securities import load_secure_config  # 보안 설정 로드 함수 경로 수정
-import argparse
+from module.securities import load_secure_config
 
 #region variables
 config           = None
-
 trader           = None
 macd_analyst     = None
 #endregion variables
@@ -102,37 +97,173 @@ def analyze_tickers(tickers):
     
     logging.info(f"===============================")
 
-def main():
-    logging.info("ASTP 프로그램 시작")
+def is_us_market_open(kis):
+    """미국 주식 시장 개장 여부를 확인합니다.
     
-    # 초기화
-    tickers = init()
-    
-    while True:
-        try:
-            # 현재 시간 로깅
-            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            logging.info(f"분석 시작 시간: {current_time}")
+    Args:
+        kis: PyKis 클라이언트 객체
+        
+    Returns:
+        bool: 시장이 열려있으면 True, 아니면 False
+    """
+    try:
+        # 대표 종목(애플)을 사용하여 시장 상태 확인
+        stock = kis.stock('AAPL')
+        quote = stock.quote()
+        
+        # 로그에 필요한 정보만 출력 (전체 정보는 너무 과하므로)
+        props = {
+            'market': getattr(quote, 'market', None),
+            'volume': getattr(quote, 'volume', 0),
+            'halt': getattr(quote, 'halt', True),
+            'extended': getattr(quote, 'extended', False),
+            'price': getattr(quote, 'price', None),
+            'time': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+        logging.info(f"AAPL 시장 상태 정보: {props}")
+        
+        # 거래 중단 여부 확인
+        if getattr(quote, 'halt', True):
+            logging.info("거래 중단 상태입니다.")
+            return False
             
-            # 종목 분석
-            analyze_tickers(tickers)
+        # 거래량 확인 (거래량이 0이면 장이 열려있지 않을 가능성이 높음)
+        if getattr(quote, 'volume', 0) <= 0:
+            logging.info("거래량이 0입니다. 장이 열려있지 않을 가능성이 높습니다.")
+            return False
+        
+        # 나스닥 시장은 보통 9:30 AM - 4:00 PM ET에 개장
+        # 시간대 확인 (간단하게 미국 동부 시간으로 변환)
+        et_hour, et_minute, et_weekday = get_us_eastern_time()
+        
+        # 주말 확인
+        if et_weekday >= 5:  # 토,일
+            logging.info(f"현재 미국 동부 시간대 기준 주말입니다 (요일: {et_weekday+1}).")
+            return False
             
-            # 자동 매매 실행
-            if config.get("trading_settings", {}).get("auto_trading_enabled", False):
-                logging.info("자동 매매 기능 실행 중...")
-                trading_result = trader.auto_trading_cycle()
-                logging.info(f"자동 매매 실행 결과: 매도 {trading_result['sell_count']}건, 매수 {trading_result['buy_count']}건")
-            else:
-                logging.info("자동 매매 기능이 비활성화되어 있습니다. config.yaml.trading_settings.auto_trading_enabled를 true로 설정하세요.")
+        # 시간 확인 (9:30 AM - 4:00 PM)
+        is_market_hours = (
+            (et_hour > 9 or (et_hour == 9 and et_minute >= 30)) and
+            et_hour < 16
+        )
+        
+        if not is_market_hours:
+            logging.info(f"현재 미국 동부 시간대 기준 정규장 시간이 아닙니다 (현재: {et_hour:02d}:{et_minute:02d}).")
+            return False
             
-            # 설정된 주기만큼 대기
-            wait_time = config["system"]["operating_cycle"]
-            logging.info(f"{wait_time}초 대기 중...")
-            time.sleep(wait_time)
-            
-        except Exception as e:
-            logging.error(f"오류 발생: {str(e)}")
-            time.sleep(60)  # 오류 발생 시 1분 대기 후 재시도
+        logging.info("모든 조건으로 확인 결과, 미국 주식 시장은 현재 개장 중으로 판단됩니다.")
+        return True
+        
+    except Exception as e:
+        logging.error(f"미국 장 개장 여부 확인 실패: {str(e)}")
+        # 안전을 위해 예외 발생 시 False 반환
+        return False
 
-if __name__ == "__main__":
+def get_us_eastern_time():
+    """현재 미국 동부 시간(ET)을 계산합니다.
+    
+    Returns:
+        tuple: (시, 분, 요일)
+    """
+    # 현재 한국 시간
+    now_kr = datetime.now()
+    
+    # 한국과 미국 동부의 시차 (한국 UTC+9, 미국 동부 UTC-4/-5)
+    # 서머타임 여부에 따라 시차가 다름
+    # 간단한 서머타임 확인 (3월 둘째 일요일 ~ 11월 첫째 일요일)
+    year = now_kr.year
+    dst_start = datetime(year, 3, 8 + (6 - datetime(year, 3, 8).weekday()) % 7, 2)  # 3월 둘째 일요일
+    dst_end = datetime(year, 11, 1 + (6 - datetime(year, 11, 1).weekday()) % 7, 2)  # 11월 첫째 일요일
+    
+    # 서머타임 적용 여부에 따라 시차 계산
+    if dst_start <= now_kr.replace(tzinfo=None) < dst_end:
+        # 서머타임 적용 (EDT, UTC-4)
+        hour_diff = 13  # 한국 - 미국 동부 시차
+        logging.info("서머타임 적용 중 (EDT, UTC-4)")
+    else:
+        # 표준시 적용 (EST, UTC-5)
+        hour_diff = 14  # 한국 - 미국 동부 시차
+        logging.info("표준시 적용 중 (EST, UTC-5)")
+    
+    # 미국 동부 시간 계산
+    us_eastern = now_kr - timedelta(hours=hour_diff)
+    
+    # 시, 분, 요일 반환
+    return us_eastern.hour, us_eastern.minute, us_eastern.weekday()
+
+def calculate_time_to_market_open():
+    """다음 미국 장 개장 시간까지 남은 시간(초)을 계산합니다.
+    
+    Returns:
+        float: 다음 개장까지 남은 시간(초), 이미 개장 중이면 0 반환
+    """
+    # 미국 동부 시간 정보 가져오기
+    et_hour, et_minute, weekday = get_us_eastern_time()
+    
+    # 현재 동부 시간 객체 생성
+    now_kr = datetime.now()
+    hour_diff = 13 if is_dst() else 14  # 서머타임 여부에 따른 시차
+    now_et = now_kr - timedelta(hours=hour_diff)
+    
+    # 오늘 개장 시간 (9:30 AM ET)
+    market_open_time = datetime_time(9, 30, 0)
+    
+    # 이미 개장 중인지 확인
+    if (weekday < 5 and  # 평일이고
+        now_et.time() >= market_open_time and  # 9:30 AM 이후이고
+        now_et.time() < datetime_time(16, 0, 0)):  # 4:00 PM 이전
+        return 0  # 이미 개장 중
+    
+    # 다음 개장일 계산
+    weekday_names = ["월", "화", "수", "목", "금", "토", "일"]
+    current_weekday_name = weekday_names[weekday]
+    
+    if weekday >= 5:  # 주말
+        days_to_monday = 7 - weekday
+        next_market_day = now_kr + timedelta(days=days_to_monday)
+        next_open_time = next_market_day.replace(hour=9, minute=30, second=0)
+    else:
+        next_open_time = now_kr.replace(hour=9, minute=30, second=0)
+
+    time_to_next_market_open = next_open_time - now_kr
+    return time_to_next_market_open.total_seconds()
+
+def is_dst():
+    """현재 미국 동부시간이 서머타임(EDT)인지 확인합니다.
+    
+    Returns:
+        bool: 서머타임이면 True, 아니면 False
+    """
+    # 현재 한국 시간
+    now_kr = datetime.now()
+    year = now_kr.year
+    
+    # 미국 서머타임 기간: 3월 둘째 일요일 ~ 11월 첫째 일요일
+    dst_start = datetime(year, 3, 8 + (6 - datetime(year, 3, 8).weekday()) % 7, 2)
+    dst_end = datetime(year, 11, 1 + (6 - datetime(year, 11, 1).weekday()) % 7, 2)
+    
+    return dst_start <= now_kr.replace(tzinfo=None) < dst_end
+
+# 로그 포맷 설정
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+)
+
+def main():
+    # 초기화 및 종목 분석
+    tickers = init()
+    analyze_tickers(tickers)
+    
+    # 주식 시장 개장 여부 확인
+    market_open = is_us_market_open(trader.kis)
+    if market_open:
+        logging.info("미국 주식 시장이 개장 중입니다.")
+        trading_result = trader.auto_trading_cycle()
+        logging.info(f"자동 매매 실행 결과: 매도 {trading_result['sell_count']}건, 매수 {trading_result['buy_count']}건")
+    else:
+        time_to_open = calculate_time_to_market_open()
+        logging.info(f"다음 개장까지 {time_to_open}초 남았습니다.")
+
+if __name__ == '__main__':
     main()
