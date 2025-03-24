@@ -25,7 +25,7 @@ on:
   workflow_dispatch:  # 수동 실행 옵션 추가
     inputs:
       is_virtual:
-        description: '모의투자 모드 활성화 (true/false)'
+        description: '모의투자 활성화 여부'
         required: true
         default: 'true'
         type: choice
