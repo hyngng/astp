@@ -4,6 +4,7 @@ on:
   schedule:
     # 한국 시간 23:20에 실행 (장 시작 10분 전)
     - cron: '20 14 * * 1-5'  # UTC 기준 14:20 (월-금)
+  workflow_dispatch:  # 수동 실행 옵션 추가
 
 jobs:
   trade:
@@ -16,10 +17,14 @@ jobs:
           current_hour=$(TZ="America/New_York" date +%H)
           current_day=$(date +%u)
           
-          # 주말(6,7) 또는 미국 시장 운영 시간이 아닐 경우 워크플로우 중단
-          if [ "$current_day" -ge 6 ] || [ "$current_hour" -lt 9 ] || [ "$current_hour" -ge 16 ]; then
-            echo "US market is closed. Skipping execution."
-            exit 1
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "수동 실행 모드: 시장 시간 체크를 건너뜁니다."
+          else
+            # 주말(6,7) 또는 미국 시장 운영 시간이 아닐 경우 워크플로우 중단
+            if [ "$current_day" -ge 6 ] || [ "$current_hour" -lt 9 ] || [ "$current_hour" -ge 16 ]; then
+              echo "US market is closed. Skipping execution."
+              exit 1
+            fi
           fi
 
       - name: Checkout code
