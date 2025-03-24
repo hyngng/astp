@@ -42,12 +42,12 @@ jobs:
         run: |
           cat > data/config.yaml << EOF
           api_info:
-            id: "${{ secrets.KIS_ID }}"
-            account: "${{ secrets.KIS_ACCOUNT }}"
-            app_key: "${{ secrets.KIS_APP_KEY }}"
-            app_secret: "${{ secrets.KIS_APP_SECRET }}"
-            virtual_app_key: "${{ secrets.KIS_VIRTUAL_APP_KEY }}"
-            virtual_app_secret: "${{ secrets.KIS_VIRTUAL_APP_SECRET }}"
+            id: "${{ secrets.ACCOUNT_ID }}"
+            account: "${{ secrets.ACCOUNT_NUMBER }}"
+            app_key: "${{ secrets.ACTUAL_APP_KEY }}"
+            app_secret: "${{ secrets.ACTUAL_APP_SECRET }}"
+            virtual_app_key: "${{ secrets.VIRTUAL_APP_KEY }}"
+            virtual_app_secret: "${{ secrets.VIRTUAL_APP_SECRET }}"
             is_virtual: true
           
           companies_settings:
