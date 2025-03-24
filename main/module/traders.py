@@ -23,14 +23,19 @@ class Trader:
         returns:
             bool: 미국 장이 열려있는지.
         '''
-        opening_time = self.kis.trading_hours("US").open_kst
-        closing_time = self.kis.trading_hours("US").close_kst
-        now          = datetime.now().time()
+        try:
+            opening_time = self.kis.trading_hours("US").open_kst
+            closing_time = self.kis.trading_hours("US").close_kst
+            now          = datetime.now().time()
 
-        is_open = True
-        if closing_time < now < opening_time:
-            is_open = False
-        return is_open
+            is_open = True
+            if closing_time < now < opening_time:
+                is_open = False
+            return is_open
+        except Exception as e:
+            logging.error(f"미국 장 개장 여부 확인 실패: {str(e)}")
+            # 연결 오류 발생 시 기본값 반환 (장 시간으로 가정)
+            return True
 
     def get_balance(self):
         ''' 내 계좌 잔고 확인하는 함수.
