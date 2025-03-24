@@ -214,18 +214,28 @@ def calculate_time_to_market_open():
         now_et.time() < datetime_time(16, 0, 0)):  # 4:00 PM 이전
         return 0  # 이미 개장 중
     
-    # 다음 개장일 계산
-    weekday_names = ["월", "화", "수", "목", "금", "토", "일"]
-    current_weekday_name = weekday_names[weekday]
+    # 다음 개장일 계산 (동부 시간 기준)
+    # 현재 동부 날짜 기준으로 datetime 객체 생성
+    now_et_full = datetime.combine(now_et.date(), now_et.time())
     
     if weekday >= 5:  # 주말
         days_to_monday = 7 - weekday
-        next_market_day = now_kr + timedelta(days=days_to_monday)
-        next_open_time = next_market_day.replace(hour=9, minute=30, second=0)
-    else:
-        next_open_time = now_kr.replace(hour=9, minute=30, second=0)
-
-    time_to_next_market_open = next_open_time - now_kr
+        next_market_day_et = now_et_full + timedelta(days=days_to_monday)
+    else:  # 평일
+        if now_et.time() >= datetime_time(16, 0, 0):  # 오늘 장 마감 후
+            next_market_day_et = now_et_full + timedelta(days=1)  # 내일
+        else:  # 오늘 장 시작 전
+            next_market_day_et = now_et_full  # 오늘
+    
+    # 다음 개장 시간 설정 (동부 시간 9:30 AM)
+    next_open_time_et = next_market_day_et.replace(hour=9, minute=30, second=0)
+    
+    # 동부 시간을 한국 시간으로 변환
+    next_open_time_kr = next_open_time_et + timedelta(hours=hour_diff)
+    
+    # 한국 시간으로 남은 시간 계산
+    time_to_next_market_open = next_open_time_kr - now_kr
+    
     return time_to_next_market_open.total_seconds()
 
 def is_dst():
