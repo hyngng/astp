@@ -428,7 +428,7 @@ class Trader:
                     # 오류 발생 시에도 모의투자처럼 처리
                     logging.info("잔고 확인 실패로 모의투자 모드로 진행합니다.")
                     is_virtual = True
-                    available_cash_float = 10000000
+                    available_cash_float = 100000
 
             # 3. 매수 종목 선정
             try:
@@ -449,7 +449,7 @@ class Trader:
             budget_percentage = self.config.get("trading_settings", {}).get("budget_percentage", 30)
             if is_virtual:
                 # 모의투자의 경우 고정된 매수 금액 사용
-                buy_budget_per_stock = 10000000  # 1천만원
+                buy_budget_per_stock = 100000  # 1천만원
             else:
                 buy_budget_per_stock = (available_cash_float * budget_percentage / 100) / max(len(buy_targets), 1)
 
