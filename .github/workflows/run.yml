@@ -24,11 +24,51 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@v3
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: "3.x"
+
       - name: Install dependencies
-        run: pip install -r requirements.txt || echo "No dependencies"
+        run: pip install -r requirements.txt
+
+      - name: Create config file
+        run: |
+          cat > data/config.yaml << EOF
+          api_info:
+            id: "${{ secrets.KIS_ID }}"
+            account: "${{ secrets.KIS_ACCOUNT }}"
+            app_key: "${{ secrets.KIS_APP_KEY }}"
+            app_secret: "${{ secrets.KIS_APP_SECRET }}"
+            virtual_app_key: "${{ secrets.KIS_VIRTUAL_APP_KEY }}"
+            virtual_app_secret: "${{ secrets.KIS_VIRTUAL_APP_SECRET }}"
+            is_virtual: true
+          
+          companies_settings:
+            auto_fetch: true
+            manual_tickers: []
+          
+          system:
+            operating_cycle: 3600
+          
+          macd_settings:
+            period: "60d"
+            interval: "1h"
+            ema_short: 12
+            ema_long: 26
+            signal_period: 9
+          
+          trading_settings:
+            auto_trading_enabled: true
+            stop_loss_threshold: -7.0
+            take_profit_threshold: 20.0
+            max_holding_days: 30
+            max_buy_stocks: 3
+            budget_percentage: 30
+            risk_level: 2
+            virtual_balance: 100000000
+          EOF
+
       - name: Run Python Script
         run: python main/main.py

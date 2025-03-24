@@ -40,9 +40,9 @@ logs/
 *.out
 
 # 보안 관련 파일 - 실제 API 키 포함된 파일
-# /data/config.yaml
-# /data/config_real.yaml
-# /data/config_*.yaml
+/data/config.yaml
+/data/config_real.yaml
+/data/config_*.yaml
 run_astp_prod.sh
 *.pem
 *.key
