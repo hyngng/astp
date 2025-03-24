@@ -1,0 +1,139 @@
+name: ASTP Trading Bot
+
+on:
+  schedule:
+    # 한국 시간 23:20에 실행 (장 시작 10분 전)
+    - cron: '20 14 * * 1-5'  # UTC 기준 14:20 (월-금)
+  workflow_dispatch:  # 수동 실행 옵션 추가
+    inputs:
+      is_virtual:
+        description: '모의투자 모드 활성화 (true/false)'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+      max_buy_stocks:
+        description: '최대 매수 종목 수'
+        required: true
+        default: '3'
+        type: choice
+        options:
+          - '1'
+          - '2'
+          - '3'
+          - '5'
+          - '10'
+      risk_level:
+        description: '위험 수준 (1: 보수적, 2: 중간, 3: 공격적)'
+        required: true
+        default: '2'
+        type: choice
+        options:
+          - '1'
+          - '2'
+          - '3'
+
+jobs:
+  trade:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check US Market Hours
+        id: market-check
+        run: |
+          # 현재 시간이 미국 공휴일인지 확인하는 로직 추가 가능
+          current_hour=$(TZ="America/New_York" date +%H)
+          current_day=$(date +%u)
+          
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "수동 실행 모드: 시장 시간 체크를 건너뜁니다."
+          else
+            # 주말(6,7) 또는 미국 시장 운영 시간이 아닐 경우 워크플로우 중단
+            if [ "$current_day" -ge 6 ] || [ "$current_hour" -lt 9 ] || [ "$current_hour" -ge 16 ]; then
+              echo "US market is closed. Skipping execution."
+              exit 1
+            fi
+          fi
+
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.x"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install lxml  # lxml 패키지 추가 설치
+
+      # 타임존 설정을 KST로 변경
+      - name: Set timezone to KST
+        run: |
+          sudo timedatectl set-timezone Asia/Seoul
+          echo "타임존이 설정되었습니다: $(date)"
+
+      # config.yaml의 민감한 정보만 업데이트
+      - name: Update sensitive information in config.yaml
+        run: |
+          mkdir -p data
+          
+          # 기존 config.yaml 파일이 없으면 새로 생성
+          if [ ! -f data/config.yaml ]; then
+            cat > data/config.yaml << EOF
+          api_info:
+            id: "${{ secrets.ACCOUNT_ID }}"
+            account: "${{ secrets.ACCOUNT_NUMBER }}"
+            app_key: "${{ secrets.ACTUAL_APP_KEY }}"
+            app_secret: "${{ secrets.ACTUAL_APP_SECRET }}"
+            virtual_app_key: "${{ secrets.VIRTUAL_APP_KEY }}"
+            virtual_app_secret: "${{ secrets.VIRTUAL_APP_SECRET }}"
+            is_virtual: ${{ github.event.inputs.is_virtual || 'true' }}
+          
+          companies_settings:
+            auto_fetch: true
+            manual_tickers: []
+          
+          system:
+            operating_cycle: 3600
+          
+          macd_settings:
+            period: "60d"
+            interval: "1h"
+            ema_short: 12
+            ema_long: 26
+            signal_period: 9
+          
+          trading_settings:
+            auto_trading_enabled: true
+            stop_loss_threshold: -7.0
+            take_profit_threshold: 20.0
+            max_holding_days: 30
+            max_buy_stocks: ${{ github.event.inputs.max_buy_stocks || '3' }}
+            budget_percentage: 30
+            risk_level: ${{ github.event.inputs.risk_level || '2' }}
+            virtual_balance: 100000000
+          EOF
+          else
+            # 기존 파일이 있는 경우, sed 명령으로 민감한 정보만 교체
+            sed -i 's/^\(\s*id:\s*\).*/\1"${{ secrets.ACCOUNT_ID }}"/' data/config.yaml
+            sed -i 's/^\(\s*account:\s*\).*/\1"${{ secrets.ACCOUNT_NUMBER }}"/' data/config.yaml
+            sed -i 's/^\(\s*app_key:\s*\).*/\1"${{ secrets.ACTUAL_APP_KEY }}"/' data/config.yaml
+            sed -i 's/^\(\s*app_secret:\s*\).*/\1"${{ secrets.ACTUAL_APP_SECRET }}"/' data/config.yaml
+            sed -i 's/^\(\s*virtual_app_key:\s*\).*/\1"${{ secrets.VIRTUAL_APP_KEY }}"/' data/config.yaml
+            sed -i 's/^\(\s*virtual_app_secret:\s*\).*/\1"${{ secrets.VIRTUAL_APP_SECRET }}"/' data/config.yaml
+            
+            # 수동 실행으로 입력된 값이 있으면 해당 설정 업데이트
+            if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+              sed -i 's/^\(\s*is_virtual:\s*\).*/\1${{ github.event.inputs.is_virtual }}/' data/config.yaml
+              sed -i 's/^\(\s*max_buy_stocks:\s*\).*/\1${{ github.event.inputs.max_buy_stocks }}/' data/config.yaml
+              sed -i 's/^\(\s*risk_level:\s*\).*/\1${{ github.event.inputs.risk_level }}/' data/config.yaml
+            fi
+          fi
+          
+          echo "config.yaml 파일의 정보가 업데이트되었습니다."
+
+      - name: Run Python Script
+        run: python main/main.py
