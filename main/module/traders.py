@@ -355,131 +355,166 @@ class Trader:
         Returns:
             Dict: 매매 사이클 실행 결과
         '''
-        # 1. 매도 실행
-        sell_candidates = self.check_all_sell_conditions()
-        sell_results = self.execute_sell_orders(sell_candidates)
-
-        # 2. 매수 추천 종목 확인
-        buy_recommendations = self.tbm_strategy.generate_recommendations()
-
-        # 모의투자 여부 확인 - config 설정 사용
-        is_virtual = self.config.get("api_info", {}).get("is_virtual", False)
-
-        if is_virtual:
-            logging.info("모의투자 모드가 활성화되어 있습니다. 현금 잔고 확인을 생략하고 바로 매수 주문을 진행합니다.")
-        else:
-            # 실계좌의 경우 잔고 확인
-            account = self.kis.account()
-            balance = account.balance()
-
-            try:
-                if hasattr(balance, "deposit") and callable(getattr(balance, "deposit")):
-                    deposit_obj = balance.deposit(currency='KRW')
-                    available_cash = deposit_obj.amount if hasattr(deposit_obj, "amount") else 0
-                elif hasattr(balance, "deposits") and "KRW" in balance.deposits:
-                    available_cash = balance.deposits["KRW"].amount
-                elif hasattr(balance, "cash"):
-                    available_cash = balance.cash
-                elif hasattr(balance, "available_cash"):
-                    available_cash = balance.available_cash
-                else:
-                    logging.error("현금 잔고 정보를 찾을 수 없습니다.")
-                    available_cash = 0
-            except Exception as e:
-                logging.error(f"현금 잔고 확인 중 오류 발생: {str(e)}")
-                available_cash = 0
-
-            try:
-                available_cash_float = float(available_cash)
-                logging.info(f"사용 가능한 현금 잔고: {available_cash_float:,.0f}원")
-            except (ValueError, TypeError):
-                logging.info(f"사용 가능한 현금 잔고: {available_cash}원")
-                available_cash_float = 0
-
-            # 실계좌의 경우 사용 가능한 잔고가 없으면 매수 스킵
-            if available_cash_float <= 0:
-                logging.warning("사용 가능한 현금 잔고가 없어 매수를 진행하지 않습니다.")
-                total_sell = sum(float(r['total_value']) for r in sell_results if r['success'] and isinstance(r['total_value'], (int, float)))
-
-                return {
-                    'sell_results': sell_results,
-                    'buy_results': [],
-                    'total_sell_value': total_sell,
-                    'total_buy_value': 0,
-                    'net_cash_flow': total_sell,
-                    'sell_count': len([r for r in sell_results if r['success']]),
-                    'buy_count': 0
-                }
-
-        # 3. 매수 종목 선정
         try:
-            max_buy_stocks = self.config.get("trading_settings", {}).get("max_buy_stocks", 3)
-            max_buy_stocks = int(max_buy_stocks) # 명시적으로 integer로 변환
-        except (TypeError, ValueError):
-            logging.error(f"max_buy_stocks 설정값을 정수로 변환 실패. 기본값 3으로 설정합니다. 설정값: {self.config.get('trading_settings', {}).get('max_buy_stocks')}")
-            max_buy_stocks = 3
-
-        # buy_recommendations이 리스트인지 확인하고 변환
-        if not isinstance(buy_recommendations, list):
-            logging.warning("매수 추천 종목이 리스트가 아닙니다. 빈 리스트로 처리합니다.")
-            buy_recommendations = []
-
-        buy_targets = buy_recommendations[:max_buy_stocks]
-
-        # 4. 매수 금액 설정
-        budget_percentage = self.config.get("trading_settings", {}).get("budget_percentage", 30)
-        if is_virtual:
-            # 모의투자의 경우 고정된 매수 금액 사용
-            buy_budget_per_stock = 100000  # 1천만원
-        else:
-            buy_budget_per_stock = (available_cash_float * budget_percentage / 100) / max(len(buy_targets), 1)
-
-        # 5. 매수 실행
-        buy_results = []
-        for ticker in buy_targets:
+            # 1. 매도 실행
             try:
-                stock = self.kis.stock(ticker)
-                quote = stock.quote()
-                current_price = float(quote.price)
-
-                quantity = int(buy_budget_per_stock / current_price)
-
-                if quantity > 0:
-                    success = self.submit_order(ticker, current_price, quantity, order_type="buy")
-
-                    buy_results.append({
-                        'ticker': ticker,
-                        'price': current_price,
-                        'quantity': quantity,
-                        'total_value': current_price * quantity,
-                        'success': success
-                    })
-
-                    if success:
-                        logging.info(f"매수 주문 성공: {ticker}, {quantity}주 @ {current_price:,.0f}원, 총액: {current_price * quantity:,.0f}원")
-                    else:
-                        logging.error(f"매수 주문 실패: {ticker}")
-                else:
-                    logging.warning(f"매수 가능 수량이 0인 종목: {ticker}, 현재가: {current_price:,.0f}원")
-
+                sell_candidates = self.check_all_sell_conditions()
+                sell_results = self.execute_sell_orders(sell_candidates)
             except Exception as e:
-                logging.error(f"{ticker} 매수 중 오류 발생: {str(e)}")
-                buy_results.append({'ticker': ticker, 'success': False, 'error': str(e)})
+                logging.error(f"매도 실행 중 오류 발생: {str(e)}")
+                import traceback
+                logging.error(f"매도 오류 상세: {traceback.format_exc()}")
+                sell_results = []
 
-        # 6. 결과 종합
-        total_sell_value = sum(float(r['total_value']) for r in sell_results if r['success'] and isinstance(r['total_value'], (int, float)))
-        total_buy_value = sum(float(r['total_value']) for r in buy_results if r['success'] and isinstance(r['total_value'], (int, float)))
+            # 2. 매수 추천 종목 확인
+            try:
+                buy_recommendations = self.tbm_strategy.generate_recommendations()
+            except Exception as e:
+                logging.error(f"매수 추천 종목 확인 중 오류 발생: {str(e)}")
+                buy_recommendations = []
 
-        result = {
-            'sell_results': sell_results,
-            'buy_results': buy_results,
-            'total_sell_value': total_sell_value,
-            'total_buy_value': total_buy_value,
-            'net_cash_flow': total_sell_value - total_buy_value,
-            'sell_count': len([r for r in sell_results if r['success']]),
-            'buy_count': len([r for r in buy_results if r['success']])
-        }
+            # 모의투자 여부 확인 - config 설정 사용
+            is_virtual = self.config.get("api_info", {}).get("is_virtual", False)
 
-        logging.info(f"자동 매매 사이클 완료: 매도 {result['sell_count']}종목 {total_sell_value:,.0f}원, 매수 {result['buy_count']}종목 {total_buy_value:,.0f}원")
+            if is_virtual:
+                logging.info("모의투자 모드가 활성화되어 있습니다. 현금 잔고 확인을 생략하고 바로 매수 주문을 진행합니다.")
+                available_cash_float = 10000000  # 모의투자의 경우 필요한 변수 정의
+            else:
+                # 실계좌의 경우 잔고 확인
+                try:
+                    account = self.kis.account()
+                    balance = account.balance()
 
-        return result
+                    try:
+                        if hasattr(balance, "deposit") and callable(getattr(balance, "deposit")):
+                            deposit_obj = balance.deposit(currency='KRW')
+                            available_cash = deposit_obj.amount if hasattr(deposit_obj, "amount") else 0
+                        elif hasattr(balance, "deposits") and "KRW" in balance.deposits:
+                            available_cash = balance.deposits["KRW"].amount
+                        elif hasattr(balance, "cash"):
+                            available_cash = balance.cash
+                        elif hasattr(balance, "available_cash"):
+                            available_cash = balance.available_cash
+                        else:
+                            logging.error("현금 잔고 정보를 찾을 수 없습니다.")
+                            available_cash = 0
+                    except Exception as e:
+                        logging.error(f"현금 잔고 확인 중 오류 발생: {str(e)}")
+                        available_cash = 0
+
+                    try:
+                        available_cash_float = float(available_cash)
+                        logging.info(f"사용 가능한 현금 잔고: {available_cash_float:,.0f}원")
+                    except (ValueError, TypeError):
+                        logging.info(f"사용 가능한 현금 잔고: {available_cash}원")
+                        available_cash_float = 0
+
+                    # 실계좌의 경우 사용 가능한 잔고가 없으면 매수 스킵
+                    if available_cash_float <= 0:
+                        logging.warning("사용 가능한 현금 잔고가 없어 매수를 진행하지 않습니다.")
+                        total_sell = sum(float(r['total_value']) for r in sell_results if r['success'] and isinstance(r['total_value'], (int, float)))
+
+                        return {
+                            'sell_results': sell_results,
+                            'buy_results': [],
+                            'total_sell_value': total_sell,
+                            'total_buy_value': 0,
+                            'net_cash_flow': total_sell,
+                            'sell_count': len([r for r in sell_results if r['success']]),
+                            'buy_count': 0
+                        }
+                except Exception as e:
+                    logging.error(f"계좌 잔고 확인 중 오류 발생: {str(e)}")
+                    # 오류 발생 시에도 모의투자처럼 처리
+                    logging.info("잔고 확인 실패로 모의투자 모드로 진행합니다.")
+                    is_virtual = True
+                    available_cash_float = 10000000
+
+            # 3. 매수 종목 선정
+            try:
+                max_buy_stocks = self.config.get("trading_settings", {}).get("max_buy_stocks", 3)
+                max_buy_stocks = int(max_buy_stocks) # 명시적으로 integer로 변환
+            except (TypeError, ValueError):
+                logging.error(f"max_buy_stocks 설정값을 정수로 변환 실패. 기본값 3으로 설정합니다. 설정값: {self.config.get('trading_settings', {}).get('max_buy_stocks')}")
+                max_buy_stocks = 3
+
+            # buy_recommendations이 리스트인지 확인하고 변환
+            if not isinstance(buy_recommendations, list):
+                logging.warning("매수 추천 종목이 리스트가 아닙니다. 빈 리스트로 처리합니다.")
+                buy_recommendations = []
+
+            buy_targets = buy_recommendations[:max_buy_stocks]
+
+            # 4. 매수 금액 설정
+            budget_percentage = self.config.get("trading_settings", {}).get("budget_percentage", 30)
+            if is_virtual:
+                # 모의투자의 경우 고정된 매수 금액 사용
+                buy_budget_per_stock = 10000000  # 1천만원
+            else:
+                buy_budget_per_stock = (available_cash_float * budget_percentage / 100) / max(len(buy_targets), 1)
+
+            # 5. 매수 실행
+            buy_results = []
+            for ticker in buy_targets:
+                try:
+                    stock = self.kis.stock(ticker)
+                    quote = stock.quote()
+                    current_price = float(quote.price)
+
+                    quantity = int(buy_budget_per_stock / current_price)
+
+                    if quantity > 0:
+                        success = self.submit_order(ticker, current_price, quantity, order_type="buy")
+
+                        buy_results.append({
+                            'ticker': ticker,
+                            'price': current_price,
+                            'quantity': quantity,
+                            'total_value': current_price * quantity,
+                            'success': success
+                        })
+
+                        if success:
+                            logging.info(f"매수 주문 성공: {ticker}, {quantity}주 @ {current_price:,.0f}원, 총액: {current_price * quantity:,.0f}원")
+                        else:
+                            logging.error(f"매수 주문 실패: {ticker}")
+                    else:
+                        logging.warning(f"매수 가능 수량이 0인 종목: {ticker}, 현재가: {current_price:,.0f}원")
+
+                except Exception as e:
+                    logging.error(f"{ticker} 매수 중 오류 발생: {str(e)}")
+                    buy_results.append({'ticker': ticker, 'success': False, 'error': str(e)})
+
+            # 6. 결과 종합
+            total_sell_value = sum(float(r['total_value']) for r in sell_results if r['success'] and isinstance(r['total_value'], (int, float)))
+            total_buy_value = sum(float(r['total_value']) for r in buy_results if r['success'] and isinstance(r['total_value'], (int, float)))
+
+            result = {
+                'sell_results': sell_results,
+                'buy_results': buy_results,
+                'total_sell_value': total_sell_value,
+                'total_buy_value': total_buy_value,
+                'net_cash_flow': total_sell_value - total_buy_value,
+                'sell_count': len([r for r in sell_results if r['success']]),
+                'buy_count': len([r for r in buy_results if r['success']])
+            }
+
+            logging.info(f"자동 매매 사이클 완료: 매도 {result['sell_count']}종목 {total_sell_value:,.0f}원, 매수 {result['buy_count']}종목 {total_buy_value:,.0f}원")
+
+            return result
+            
+        except Exception as e:
+            logging.error(f"자동 매매 사이클 실행 중 예상치 못한 오류 발생: {str(e)}")
+            import traceback
+            logging.error(f"오류 상세: {traceback.format_exc()}")
+            # 최소한의 결과 반환
+            return {
+                'sell_results': [],
+                'buy_results': [],
+                'total_sell_value': 0,
+                'total_buy_value': 0,
+                'net_cash_flow': 0,
+                'sell_count': 0,
+                'buy_count': 0,
+                'error': str(e)
+            }
