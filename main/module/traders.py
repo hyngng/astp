@@ -4,6 +4,8 @@ import logging
 from typing import Dict, List, Tuple, Optional
 from module.analysts import TBM_Strategy
 import time
+import random
+import requests
 
 class Trader:
     ''' 주문자: 매수&매도주문의 적절성을 판단 후 주문하는 클래스.
@@ -18,6 +20,9 @@ class Trader:
         # 기본 설정값
         self.is_virtual = config.get("api_info", {}).get("is_virtual", False)
         
+        # PyKis 세션 설정 최적화
+        self._optimize_kis_session()
+        
         # config에서 risk_level 가져오기
         risk_level = config.get("trading_settings", {}).get("risk_level", 2)
         self.tbm_strategy = TBM_Strategy(kis, config, risk_level=risk_level)
@@ -27,6 +32,72 @@ class Trader:
         
         # 초기화 완료 로그
         logging.info(f"트레이더 초기화 완료 (모드: {'모의투자' if self.is_virtual else '실제투자'})")
+
+    def _optimize_kis_session(self):
+        """PyKis 라이브러리 세션 최적화"""
+        try:
+            # PyKis 객체의 세션 설정 확인
+            if hasattr(self.kis, 'session') and self.kis.session:
+                session = self.kis.session
+                
+                # 연결 유지 활성화
+                session.keep_alive = True
+                
+                # 타임아웃 설정 증가
+                if hasattr(session, 'timeout'):
+                    # 기본 30초에서 60초로 증가
+                    session.timeout = 60
+                
+                # 재시도 설정 확인 및 적용
+                if hasattr(self.kis, 'retry'):
+                    self.kis.retry = 3  # 기본 재시도 횟수 설정
+                
+                # 연결 풀 최적화 (requests 라이브러리 사용 시)
+                if hasattr(session, 'adapters') and hasattr(session, 'mount'):
+                    from requests.adapters import HTTPAdapter
+                    from urllib3.util.retry import Retry
+                    
+                    # 지수 백오프와 재시도 전략 설정
+                    retry_strategy = Retry(
+                        total=3,
+                        backoff_factor=1,
+                        status_forcelist=[429, 500, 502, 503, 504],
+                        allowed_methods=["HEAD", "GET", "POST"],
+                    )
+                    
+                    # 세션에 어댑터 설정
+                    adapter = HTTPAdapter(max_retries=retry_strategy, pool_connections=5, pool_maxsize=10)
+                    session.mount("https://", adapter)
+                    session.mount("http://", adapter)
+                
+                logging.info("PyKis 세션 최적화 완료")
+        except Exception as e:
+            logging.warning(f"PyKis 세션 최적화 중 오류: {str(e)}")
+
+    def _reset_kis_connection(self):
+        """PyKis 연결 재설정 - 토큰 갱신 또는 세션 재생성"""
+        try:
+            logging.info("PyKis 연결 재설정 시도...")
+            
+            # 토큰 갱신 시도
+            if hasattr(self.kis, 'auth') and hasattr(self.kis.auth, 'refresh'):
+                logging.info("토큰 갱신 시도")
+                self.kis.auth.refresh()
+                logging.info("토큰 갱신 완료")
+                return True
+            
+            # 토큰 갱신 메서드가 없으면 다른 방법 시도
+            if hasattr(self.kis, 'connect') or hasattr(self.kis, 'login'):
+                method = getattr(self.kis, 'connect', None) or getattr(self.kis, 'login', None)
+                if method and callable(method):
+                    logging.info("재연결 시도")
+                    method()
+                    logging.info("재연결 완료")
+                    return True
+        except Exception as e:
+            logging.error(f"PyKis 연결 재설정 실패: {str(e)}")
+        
+        return False
 
     def get_trading_hours(self):
         ''' 현재 미국 장이 열려있는지 확인하는 함수.
@@ -59,82 +130,173 @@ class Trader:
         return repr(balance)
 
     def update_holdings(self):
-        '''보유 종목 정보를 업데이트하는 함수'''
+        """현재 보유 종목 정보 업데이트"""
         try:
-            account = self.kis.account()
-            balance = account.balance()
-
-            # 보유 종목 정보 초기화
-            self.holdings = {}
-
-            # 보유 종목 정보 업데이트
-            for stock in balance.stocks:
-                # 주요 속성 안전하게 가져오기
-                symbol = getattr(stock, 'symbol', '')
-                quantity = getattr(stock, 'quantity', 0)
-                avg_price = getattr(stock, 'avg_price', None)
-                current_price = getattr(stock, 'current_price', None)
-                total_value = getattr(stock, 'total_value', None)
-                profit_loss = getattr(stock, 'profit_loss', None)
-                profit_loss_rate = getattr(stock, 'profit_loss_rate', None)
+            # 1. PyKis 연결 상태 확인
+            connection_issues = False
+            
+            # 2. 계좌 정보 가져오기
+            try:
+                # 직접 속성에 접근하지 않고 메서드 호출로 수정
+                account = self.kis.account()
                 
-                # 해외 주식과 국내 주식의 속성명 차이 처리
-                if avg_price is None:
-                    avg_price = getattr(stock, 'purchase_price', 0) or getattr(stock, 'pchs_avg_pric', 0)
-                if current_price is None:
-                    current_price = getattr(stock, 'price', 0) or getattr(stock, 'now_pric', 0)
-                if total_value is None:
-                    total_value = getattr(stock, 'eval_amt', 0) or quantity * current_price
-                if profit_loss is None:
-                    profit_loss = getattr(stock, 'eval_pfls_amt', 0)
-                if profit_loss_rate is None:
-                    profit_loss_rate = getattr(stock, 'eval_pfls_rt', 0)
+                # 명시적 대기 - API 요청 속도 제한 방지
+                time.sleep(1)
                 
-                if symbol:  # 심볼이 있는 경우에만 추가
-                    self.holdings[symbol] = {
-                        'quantity': quantity,
-                        'avg_price': avg_price,
-                        'current_price': current_price,
-                        'total_value': total_value,
-                        'profit_loss': profit_loss,
-                        'profit_loss_rate': profit_loss_rate,
-                        'buy_date': datetime.now().strftime("%Y-%m-%d")  # 매수일은 정확한 정보가 없어 현재 날짜로 대체
-                    }
-
-            logging.info(f"보유 종목 정보 업데이트 완료: {len(self.holdings)}개 종목")
-            return True
-
+                # 잔액 정보 가져오기
+                balance = account.balance()
+                
+                # 잔액 정보에서 필요한 데이터 추출
+                if hasattr(balance, 'summary') and hasattr(balance.summary, 'total'):
+                    self.total_balance = balance.summary.total
+                else:
+                    # 적절한 필드 찾기
+                    logging.info("KIS 잔액 구조 분석 중...")
+                    balance_repr = repr(balance)
+                    logging.info(f"잔액 구조: {balance_repr[:500]}...")  # 처음 500자만 로깅
+                    
+                    # 일반적인 속성 시도
+                    for total_attr in ['total', 'total_balance', 'balance', 'evaluation_amount']:
+                        if hasattr(balance, total_attr):
+                            self.total_balance = getattr(balance, total_attr)
+                            logging.info(f"잔액 정보 필드 찾음: {total_attr}")
+                            break
+                    else:
+                        # 총 평가금액이 없으면 0으로 설정
+                        self.total_balance = 0
+                
+                # 주식 정보 추출
+                if hasattr(balance, 'stocks'):
+                    self.holdings = balance.stocks
+                else:
+                    # 다른 가능한 속성명 시도
+                    for stock_attr in ['positions', 'owned_stocks', 'holdings']:
+                        if hasattr(balance, stock_attr):
+                            self.holdings = getattr(balance, stock_attr)
+                            logging.info(f"보유 주식 정보 필드 찾음: {stock_attr}")
+                            break
+                    else:
+                        self.holdings = []
+                
+                # 리스트가 아니면 빈 리스트로 변환
+                if not isinstance(self.holdings, list):
+                    logging.warning("보유 종목 정보가 리스트가 아닙니다. 빈 리스트로 초기화합니다.")
+                    self.holdings = []
+                
+                # 해외주식인 경우 필요한 속성명 조정
+                for stock in self.holdings:
+                    self._normalize_stock_attributes(stock)
+                
+                logging.info(f"보유 종목 정보 업데이트 완료: {len(self.holdings)}개 종목, 총 자산: {self.total_balance:,.0f}원")
+                return True
+                
+            except Exception as e:
+                error_msg = str(e)
+                connection_issues = "Connection" in error_msg or "Remote" in error_msg or "aborted" in error_msg
+                
+                logging.error(f"보유 종목 정보 업데이트 실패: {error_msg}")
+                import traceback
+                logging.error(f"보유 종목 업데이트 상세 오류: {traceback.format_exc()}")
+                
+                # 연결 오류면 PyKis 연결 재설정 시도
+                if connection_issues:
+                    logging.warning("네트워크 연결 문제 감지. PyKis 연결 재설정 시도...")
+                    self._reset_kis_connection()
+                
+                # 속성이 없을 경우 기본값 설정
+                if not hasattr(self, 'holdings') or self.holdings is None:
+                    self.holdings = []
+                if not hasattr(self, 'total_balance') or self.total_balance is None:
+                    self.total_balance = 0
+                    
+                return False
         except Exception as e:
-            logging.error(f"보유 종목 정보 업데이트 실패: {str(e)}")
-            import traceback
-            logging.error(f"보유 종목 업데이트 상세 오류: {traceback.format_exc()}")
+            logging.error(f"보유 종목 정보 업데이트 중 예외 발생: {str(e)}")
             return False
 
-    def api_call_with_retry(self, func, *args, max_retries=3, initial_delay=2, **kwargs):
-        '''API 호출을 지수 백오프 방식으로 재시도하는 함수'''
-        delay = initial_delay
-        last_error = None
+    def _normalize_stock_attributes(self, stock):
+        """주식 객체의 속성을 표준화"""
+        # 필수 속성 목록 정의
+        required_attrs = {
+            'ticker': ['symbol', 'code', 'stock_code'], 
+            'quantity': ['qty', 'volume', 'amount'], 
+            'price': ['current_price', 'trade_price', 'now_pric'],
+            'market': ['exchange', 'market_code']
+        }
         
-        for retry in range(max_retries):
+        # 각 필수 속성에 대해 확인 및 설정
+        for attr, alternates in required_attrs.items():
+            if not hasattr(stock, attr):
+                # 대체 속성 시도
+                for alt in alternates:
+                    if hasattr(stock, alt):
+                        value = getattr(stock, alt)
+                        setattr(stock, attr, value)
+                        break
+                else:
+                    # 대체 속성도 없는 경우 기본값 설정
+                    if attr == 'ticker':
+                        # 티커는 필수이므로 기존 객체 속성에서 추정
+                        attrs = dir(stock)
+                        logging.debug(f"객체 속성: {attrs}")
+                        # 기본값 설정
+                        setattr(stock, attr, getattr(stock, attrs[0], "UNKNOWN"))
+                    elif attr == 'market':
+                        # 티커 형식에 따라 시장 추정
+                        ticker = getattr(stock, 'ticker', '') or getattr(stock, 'symbol', '')
+                        market = 'NYSE' if any(c.isalpha() for c in str(ticker)) else 'KRX'
+                        setattr(stock, attr, market)
+                    elif attr == 'quantity':
+                        setattr(stock, attr, 0)
+                    elif attr == 'price':
+                        setattr(stock, attr, 0)
+
+    def api_call_with_retry(self, func, *args, max_retries=5, initial_delay=3, backoff_factor=2, **kwargs):
+        """
+        네트워크 오류에 대한 자동 재시도 로직이 있는 API 호출 래퍼 함수
+        
+        Args:
+            func: 호출할 함수
+            *args: 함수 인자
+            max_retries: 최대 재시도 횟수 (기본값: 5)
+            initial_delay: 초기 대기 시간(초) (기본값: 3)
+            backoff_factor: 지수 백오프 계수 (기본값: 2)
+            **kwargs: 함수 키워드 인자
+            
+        Returns:
+            함수 실행 결과
+        """
+        import time
+        import random
+        import requests
+        
+        retries = 0
+        delay = initial_delay
+        
+        while True:
             try:
                 return func(*args, **kwargs)
-            except Exception as e:
-                last_error = e
-                error_str = str(e)
-                # API 호출 제한 또는 네트워크 오류 감지
-                if "API 호출 횟수를 초과" in error_str or "Connection aborted" in error_str:
-                    if retry < max_retries - 1:
-                        logging.warning(f"API 호출 또는 네트워크 오류. {delay}초 후 재시도 ({retry+1}/{max_retries})...")
-                        time.sleep(delay)
-                        delay *= 2  # 지수 백오프
-                    else:
-                        logging.error(f"최대 재시도 횟수 초과: {error_str}")
-                else:
-                    # 다른 종류의 오류는 즉시 발생
-                    break
-        
-        # 모든 재시도 실패
-        raise last_error if last_error else Exception("API 호출 실패")
+            except (requests.exceptions.ConnectionError, 
+                    requests.exceptions.ReadTimeout, 
+                    requests.exceptions.ChunkedEncodingError,
+                    requests.exceptions.RequestException,
+                    ConnectionResetError,
+                    ConnectionAbortedError) as e:
+                retries += 1
+                
+                if retries > max_retries:
+                    logging.error(f"최대 재시도 횟수({max_retries})를 초과했습니다: {str(e)}")
+                    raise
+                
+                # 지터(jitter) 추가하여 동시 재시도 방지
+                jitter = random.uniform(0, 0.5) * delay
+                wait_time = delay + jitter
+                
+                logging.warning(f"API 호출 또는 네트워크 오류. {wait_time:.1f}초 후 재시도 ({retries}/{max_retries})...")
+                time.sleep(wait_time)
+                
+                # 지수 백오프 적용
+                delay *= backoff_factor
 
     def get_quote(self, ticker: str) -> Dict:
         '''종목 시세 정보를 가져오는 함수'''
@@ -224,61 +386,133 @@ class Trader:
             logging.error(f"{ticker} 매도 조건 확인 중 오류 발생: {str(e)}")
             return False, {'reason': f'오류: {str(e)}'}
 
-    def submit_order(self, ticker: str, price: float, quantity: int, order_type: str = "buy") -> bool:
-        '''주문 실행'''
-        if quantity <= 0:
-            logging.warning(f"주문 수량이 0 이하입니다: {ticker}, {quantity}주")
+    def submit_order(self, ticker, price, quantity, order_type="buy"):
+        """주문 제출 함수 (매수/매도)"""
+        if not ticker or not price or not quantity:
+            logging.error(f"주문 정보 부족: ticker={ticker}, price={price}, quantity={quantity}")
             return False
-            
+        
+        if quantity <= 0:
+            logging.warning(f"주문 수량이 0 이하입니다: {quantity}. 주문을 취소합니다.")
+            return False
+        
+        order_type = order_type.upper()
+        
         try:
-            stock = self.kis.stock(ticker)
+            # 실제 주문이 아닌 모의 투자 모드인지 확인
+            is_virtual = self.config.get("api_info", {}).get("is_virtual", False)
             
-            # 주문 로그
-            log_prefix = "모의투자" if self.config.get("api_info", {}).get("is_virtual", False) else "실제"
-            logging.info(f"{log_prefix} 주문 실행: {ticker} {order_type} {quantity}주 @ {price:,.0f}원")
+            logging.info(f"{'모의' if is_virtual else '실제'} 주문 시도: {ticker} {order_type} {quantity}주 @ {price:,.2f}")
             
-            # 주문 실행
-            try:
-                # PyKis 최신 문서에 따른 매개변수 사용
-                if order_type == "buy":
-                    order = stock.buy(price=price, qty=quantity)
-                else:
-                    order = stock.sell(price=price, qty=quantity)
-                    
-                if not order:
-                    logging.error(f"{log_prefix} 주문 실패: {ticker}")
-                    return False
-                    
-                logging.info(f"{log_prefix} 주문 성공: {ticker} {order_type} {quantity}주 @ {price:,.0f}원")
-                
-                # 보유 종목 정보 업데이트
-                self.update_holdings()
-                
-                return True
-                
-            except Exception as e:
-                logging.error(f"주문 메서드 호출 실패 ({ticker}): {str(e)}")
-                
-                # 다른 매개변수 시도
+            # PyKis API를 통한 주문 처리
+            # 연속된 네트워크 오류 발생 시 세션 재설정 시도
+            consecutive_errors = 0
+            max_consecutive_errors = 2
+            
+            while consecutive_errors < max_consecutive_errors:
                 try:
-                    logging.info(f"대체 매개변수로 재시도: {ticker}")
-                    if order_type == "buy":
-                        order = stock.buy(price=price, volume=quantity)
-                    else:
-                        order = stock.sell(price=price, volume=quantity)
-                        
-                    if order:
-                        logging.info(f"대체 매개변수로 주문 성공: {ticker}")
-                        self.update_holdings()
-                        return True
-                except Exception as e2:
-                    logging.error(f"대체 매개변수 시도 중 오류: {str(e2)}")
+                    # API 요청 간 최소 간격 준수
+                    time.sleep(1.5)
                     
-                return False
+                    order_func = None
+                    if order_type == "BUY":
+                        order_func = self.kis.order.buy
+                    else:
+                        order_func = self.kis.order.sell
+                    
+                    # 주문에 사용할 매개변수 준비
+                    # PyKis 버전에 따라 매개변수 이름이 다를 수 있음
+                    try:
+                        # qty 매개변수 먼저 시도
+                        kwargs = {
+                            'is_virtual': is_virtual
+                        }
+                        order_result = order_func(ticker, price, qty=quantity, **kwargs)
+                        
+                        # 성공 시 consecutive_errors 초기화
+                        consecutive_errors = 0
+                    except TypeError as e:
+                        error_msg = str(e)
+                        if "unexpected keyword argument 'qty'" in error_msg:
+                            # volume 매개변수로 재시도
+                            logging.info("매개변수 'qty' 대신 'volume' 사용 시도")
+                            kwargs = {
+                                'is_virtual': is_virtual
+                            }
+                            order_result = order_func(ticker, price, volume=quantity, **kwargs)
+                        elif "unexpected keyword argument 'volume'" in error_msg:
+                            # quantity 매개변수로 재시도
+                            logging.info("매개변수 'volume' 대신 'quantity' 사용 시도")
+                            kwargs = {
+                                'is_virtual': is_virtual
+                            }
+                            order_result = order_func(ticker, price, quantity=quantity, **kwargs)
+                        else:
+                            # 다른 TypeError는 그대로 발생
+                            raise
+                    
+                    # 주문 결과 확인
+                    if hasattr(order_result, 'is_success') and not order_result.is_success:
+                        # 주문 실패 처리
+                        error_msg = getattr(order_result, 'message', 'Unknown error')
+                        logging.error(f"주문 실패: {ticker} {order_type} - {error_msg}")
+                        return False
+                    
+                    # 주문 성공 여부 확인을 위한 속성 이름 파악
+                    success_attrs = ['success', 'is_success', 'order_success', 'result']
+                    order_success = True  # 기본값
+                    
+                    for attr in success_attrs:
+                        if hasattr(order_result, attr):
+                            order_success = getattr(order_result, attr)
+                            if isinstance(order_success, bool) and not order_success:
+                                logging.error(f"주문 실패: {ticker} {order_type} - 속성 {attr}이(가) False")
+                                return False
+                    
+                    # 주문 번호 추출
+                    order_no = None
+                    order_no_attrs = ['order_no', 'order_number', 'orderNo', 'ordNo']
+                    for attr in order_no_attrs:
+                        if hasattr(order_result, attr):
+                            order_no = getattr(order_result, attr)
+                            break
+                    
+                    logging.info(f"주문 성공: {ticker} {order_type} {quantity}주 @ {price:,.2f} (주문번호: {order_no or 'N/A'})")
+                    return True
+                    
+                except (requests.exceptions.ConnectionError, ConnectionRefusedError, 
+                        ConnectionResetError, ConnectionAbortedError) as e:
+                    # 네트워크 연결 오류
+                    consecutive_errors += 1
+                    logging.warning(f"연결 오류 ({consecutive_errors}/{max_consecutive_errors}): {str(e)}")
+                    
+                    if consecutive_errors >= max_consecutive_errors:
+                        logging.error(f"연속 {max_consecutive_errors}회 연결 오류 발생. 세션 재설정 시도...")
+                        # 세션 재설정 시도
+                        self._reset_kis_connection()
+                        # 마지막 시도
+                        time.sleep(3)  # 재설정 후 잠시 대기
+                        try:
+                            order_func = self.kis.order.buy if order_type == "BUY" else self.kis.order.sell
+                            # 마지막 한 번 더 시도
+                            order_result = order_func(ticker, price, qty=quantity, is_virtual=is_virtual)
+                            logging.info(f"세션 재설정 후 주문 성공: {ticker} {order_type}")
+                            return True
+                        except Exception as final_e:
+                            logging.error(f"최종 주문 실패: {str(final_e)}")
+                            return False
+                    else:
+                        # 잠시 대기 후 재시도
+                        wait_time = 2 * consecutive_errors
+                        logging.info(f"{wait_time}초 후 재시도...")
+                        time.sleep(wait_time)
+                except Exception as other_e:
+                    # 기타 예외
+                    logging.error(f"{ticker} {order_type} 주문 중 오류 발생: {str(other_e)}")
+                    return False
                 
         except Exception as e:
-            logging.error(f"주문 실행 중 오류 발생 ({ticker}): {str(e)}")
-            logging.error(f"상세 오류: {traceback.format_exc()}")
+            logging.error(f"{ticker} {order_type} 주문 중 오류 발생: {str(e)}")
             return False
 
     def get_daily_profit_loss(self):
@@ -395,165 +629,173 @@ class Trader:
 
         return sell_results
 
-    def auto_trading_cycle(self) -> Dict:
-        '''자동 매매 사이클 실행'''
+    def auto_trading_cycle(self):
+        """자동 매매 사이클 실행"""
+        result = {
+            'sell_count': 0,
+            'buy_count': 0,
+            'errors': []
+        }
+        
         try:
-            # API 호출 간격 조절을 위한 지연 시간
-            api_call_delay = 1  # 초
+            # 0. KIS 연결 상태 확인 및 초기화
+            self._optimize_kis_session()
             
-            # 1. 매도 실행
-            try:
-                sell_candidates = self.check_all_sell_conditions()
-                time.sleep(api_call_delay)  # API 호출 속도 제한 방지
-                sell_results = self.execute_sell_orders(sell_candidates)
-            except Exception as e:
-                logging.error(f"매도 실행 중 오류 발생: {str(e)}")
-                logging.error(f"상세 오류: {traceback.format_exc()}")
-                sell_results = []
-                
-            # 2. 매수 추천 종목 확인
-            try:
-                time.sleep(api_call_delay)  # API 호출 속도 제한 방지
-                buy_recommendations = self.tbm_strategy.generate_recommendations()
-            except Exception as e:
-                logging.error(f"매수 추천 종목 확인 중 오류 발생: {str(e)}")
-                buy_recommendations = []
-                
-            # 3. 현금 잔고 확인
-            available_cash_float = 0
+            # 1. 보유 종목 정보 업데이트
+            retry_count = 0
+            max_retries = 3
+            success = False
             
-            if self.config.get("api_info", {}).get("is_virtual", False):
-                logging.info("모의투자 모드가 활성화되어 있습니다. 현금 잔고 확인을 생략하고 바로 매수 주문을 진행합니다.")
-                available_cash_float = 10000000  # 모의투자의 경우 충분한 자금 가정
-            else:
-                # 실계좌 잔고 확인
+            while not success and retry_count < max_retries:
                 try:
-                    available_cash_float = self._get_available_cash()
-                    
-                    # 실계좌의 경우 사용 가능한 잔고가 없으면 매수 스킵
-                    if available_cash_float <= 0:
-                        logging.warning("사용 가능한 현금 잔고가 없어 매수를 진행하지 않습니다.")
-                        total_sell = sum(float(r['total_value']) for r in sell_results if r['success'] and isinstance(r['total_value'], (int, float)))
+                    success = self.update_holdings()
+                    if not success:
+                        retry_count += 1
+                        if retry_count < max_retries:
+                            logging.warning(f"보유 종목 정보 업데이트 실패. {retry_count}/{max_retries} 재시도...")
+                            time.sleep(3 * retry_count)  # 점진적으로 대기 시간 증가
+                            # 연결 재설정 시도
+                            self._reset_kis_connection()
+                except Exception as e:
+                    retry_count += 1
+                    logging.error(f"보유 종목 업데이트 중 예외: {str(e)}")
+                    time.sleep(3 * retry_count)
+            
+            if not success:
+                result['errors'].append("보유 종목 정보 업데이트 최대 재시도 횟수 초과")
+                return result
+            
+            # 2. 매도 대상 선정 및 처리
+            try:
+                # API 요청 간격 추가 (초당 요청 제한 대응)
+                time.sleep(2)
+                
+                sell_targets = self.check_all_sell_conditions()
+                if sell_targets:
+                    logging.info(f"매도 대상 종목: {len(sell_targets)}개")
+                    for ticker in sell_targets:
+                        try:
+                            # 주문 제출 전 API 요청 간격 추가
+                            time.sleep(2)
+                            
+                            if isinstance(ticker, dict) and 'ticker' in ticker:
+                                ticker_symbol = ticker['ticker']
+                                ticker_price = ticker.get('current_price', 0)
+                                ticker_qty = ticker.get('quantity', 0)
+                            else:
+                                ticker_symbol = ticker
+                                ticker_price = 0
+                                ticker_qty = 0
+                                
+                                # 티커만 있는 경우 보유 종목에서 정보 조회
+                                for holding in self.holdings:
+                                    if getattr(holding, 'ticker', '') == ticker_symbol:
+                                        ticker_price = getattr(holding, 'price', 0)
+                                        ticker_qty = getattr(holding, 'quantity', 0)
+                                        break
                         
-                        return {
-                            'sell_results': sell_results,
-                            'buy_results': [],
-                            'total_sell_value': total_sell,
-                            'total_buy_value': 0,
-                            'net_cash_flow': total_sell,
-                            'sell_count': len([r for r in sell_results if r['success']]),
-                            'buy_count': 0
-                        }
-                except Exception as e:
-                    logging.error(f"계좌 잔고 확인 중 오류 발생: {str(e)}")
-                    logging.info("잔고 확인 실패로 모의투자 모드처럼 진행합니다.")
-                    available_cash_float = 10000000
-            
-            # 4. 매수 종목 선정
-            max_buy_stocks = self._get_max_buy_stocks()
-            
-            # 추천 종목이 리스트가 아니면 빈 리스트로 변환
-            if not isinstance(buy_recommendations, list):
-                logging.warning("매수 추천 종목이 리스트가 아닙니다. 빈 리스트로 처리합니다.")
-                buy_recommendations = []
-                
-            # 상위 N개 종목 선택
-            buy_targets = buy_recommendations[:max_buy_stocks]
-            
-            # 5. 매수 금액 설정
-            budget_percentage = self.config.get("trading_settings", {}).get("budget_percentage", 30)
-            
-            # 보유주식 총액 계산
-            total_holdings_value = sum(
-                holding.get('total_value', 0) 
-                for holding in self.holdings.values() 
-                if isinstance(holding.get('total_value'), (int, float))
-            )
-            
-            # 보유주식 금액이 10만원 이하면 매수 금액을 1만원으로 제한
-            if total_holdings_value <= 100000:
-                logging.info(f"보유주식 총액이 10만원 이하({total_holdings_value:,.0f}원)이므로 매수 금액을 1만원으로 제한합니다.")
-                buy_budget_per_stock = 10000  # 1만원
-                if not self.config.get("api_info", {}).get("is_virtual", False):
-                    # 실계좌는 예산과 1만원 중 작은 값
-                    buy_budget_per_stock = min(10000, (available_cash_float * budget_percentage / 100) / max(len(buy_targets), 1))
-            else:
-                if self.config.get("api_info", {}).get("is_virtual", False):
-                    # 모의투자의 경우 고정된 매수 금액 사용
-                    buy_budget_per_stock = 1000000  # 100만원
+                            success = self.submit_order(ticker_symbol, ticker_price, ticker_qty, order_type="sell")
+                            
+                            if success:
+                                result['sell_count'] += 1
+                        except Exception as e:
+                            error_msg = f"{ticker_symbol if isinstance(ticker, dict) else ticker} 매도 주문 실패: {str(e)}"
+                            logging.error(error_msg)
+                            result['errors'].append(error_msg)
                 else:
-                    # 실계좌는 예산 기반 계산
-                    buy_budget_per_stock = (available_cash_float * budget_percentage / 100) / max(len(buy_targets), 1)
+                    logging.info("매도 대상 종목이 없습니다.")
+            except Exception as e:
+                error_msg = f"매도 처리 중 오류 발생: {str(e)}"
+                logging.error(error_msg)
+                result['errors'].append(error_msg)
             
-            # 6. 매수 실행
-            buy_results = []
-            for ticker in buy_targets:
-                try:
-                    time.sleep(api_call_delay)  # API 호출 속도 제한 방지
-                    
-                    # 시세 조회
-                    try:
-                        quote = self.get_quote(ticker)
-                        current_price = float(quote.price)
-                    except Exception as e:
-                        logging.error(f"{ticker} 시세 조회 실패: {str(e)}")
-                        continue
-                    
-                    # 수량 계산
-                    quantity = int(buy_budget_per_stock / current_price)
-                    
-                    if quantity <= 0:
-                        logging.warning(f"매수 가능 수량이 0인 종목: {ticker}, 현재가: {current_price:,.0f}원")
-                        continue
-                    
-                    # 주문 실행
-                    success = self.submit_order(ticker, current_price, quantity, order_type="buy")
-                    
-                    buy_results.append({
-                        'ticker': ticker,
-                        'price': current_price,
-                        'quantity': quantity,
-                        'total_value': current_price * quantity,
-                        'success': success
-                    })
-                    
-                except Exception as e:
-                    logging.error(f"{ticker} 매수 중 오류 발생: {str(e)}")
-                    buy_results.append({'ticker': ticker, 'success': False, 'error': str(e)})
+            # 3. 보유 종목 정보 업데이트 (매도 후)
+            try:
+                # API 요청 간격 추가 (초당 요청 제한 대응)
+                time.sleep(3)
+                
+                self.update_holdings()
+            except Exception as e:
+                logging.warning(f"매도 후 보유 종목 업데이트 실패: {str(e)}")
             
-            # 7. 결과 종합
-            total_sell_value = sum(float(r['total_value']) for r in sell_results if r['success'] and isinstance(r['total_value'], (int, float)))
-            total_buy_value = sum(float(r['total_value']) for r in buy_results if r['success'] and isinstance(r['total_value'], (int, float)))
-            
-            result = {
-                'sell_results': sell_results,
-                'buy_results': buy_results,
-                'total_sell_value': total_sell_value,
-                'total_buy_value': total_buy_value,
-                'net_cash_flow': total_sell_value - total_buy_value,
-                'sell_count': len([r for r in sell_results if r['success']]),
-                'buy_count': len([r for r in buy_results if r['success']])
-            }
-            
-            logging.info(f"자동 매매 사이클 완료: 매도 {result['sell_count']}종목 {total_sell_value:,.0f}원, 매수 {result['buy_count']}종목 {total_buy_value:,.0f}원")
-            
-            return result
-            
+            # 4. 매수 대상 선정 및 처리
+            try:
+                # API 요청 간격 추가
+                time.sleep(3)
+                
+                # 최대 매수 종목 수 설정값 가져오기
+                max_buy_stocks = self._get_max_buy_stocks()
+                
+                # TBM 전략을 통한 추천 종목 가져오기
+                buy_targets = self.tbm_strategy.generate_recommendations(max_count=max_buy_stocks)
+                
+                if buy_targets:
+                    logging.info(f"매수 대상 종목: {len(buy_targets)}개 (최대 {max_buy_stocks}개)")
+                    for ticker in buy_targets:
+                        try:
+                            # 주문 제출 전 API 요청 간격 추가
+                            time.sleep(2)
+                            
+                            # 티커 정보 추출
+                            if isinstance(ticker, dict):
+                                ticker_symbol = ticker.get('ticker', '')
+                                ticker_price = ticker.get('price', 0)
+                                ticker_qty = ticker.get('quantity', 0)
+                                
+                                # 수량이 없으면 계산
+                                if not ticker_qty or ticker_qty <= 0:
+                                    # 매수 금액 기본값
+                                    buy_amount = 1000000  # 기본 100만원
+                                    
+                                    # 예산 계산 (총 자산의 1/max_buy_stocks)
+                                    if hasattr(self, 'total_balance') and self.total_balance > 0:
+                                        buy_amount = min(buy_amount, self.total_balance / max_buy_stocks)
+                                    
+                                    # 수량 계산
+                                    if ticker_price > 0:
+                                        ticker_qty = max(1, int(buy_amount / ticker_price))
+                                    else:
+                                        ticker_qty = 1
+                            else:
+                                ticker_symbol = ticker
+                                # 티커만 있는 경우 시세 조회 필요
+                                quote = self.get_quote(ticker_symbol)
+                                ticker_price = getattr(quote, 'price', 0)
+                                
+                                # 기본 매수 금액 설정
+                                buy_amount = 1000000  # 기본 100만원
+                                ticker_qty = max(1, int(buy_amount / ticker_price)) if ticker_price > 0 else 1
+                            
+                            success = self.submit_order(ticker_symbol, ticker_price, ticker_qty, order_type="buy")
+                            
+                            if success:
+                                result['buy_count'] += 1
+                                # 연속 API 호출 방지
+                                time.sleep(2)
+                        except Exception as e:
+                            error_msg = f"{ticker_symbol if 'ticker_symbol' in locals() else ticker} 매수 주문 실패: {str(e)}"
+                            logging.error(error_msg)
+                            result['errors'].append(error_msg)
+                else:
+                    logging.info("매수 대상 종목이 없습니다.")
+            except Exception as e:
+                error_msg = f"매수 처리 중 오류 발생: {str(e)}"
+                logging.error(error_msg)
+                result['errors'].append(error_msg)
+        
         except Exception as e:
-            logging.error(f"자동 매매 사이클 실행 중 예상치 못한 오류 발생: {str(e)}")
-            logging.error(f"상세 오류: {traceback.format_exc()}")
-            
-            # 최소한의 결과 반환
-            return {
-                'sell_results': [],
-                'buy_results': [],
-                'total_sell_value': 0,
-                'total_buy_value': 0,
-                'net_cash_flow': 0,
-                'sell_count': 0,
-                'buy_count': 0,
-                'error': str(e)
-            }
+            error_msg = f"매매 사이클 실행 중 예외 발생: {str(e)}"
+            logging.error(error_msg)
+            result['errors'].append(error_msg)
+        
+        # 5. 거래 사이클 결과 요약
+        error_count = len(result['errors'])
+        logging.info(f"매매 사이클 결과: 매도 {result['sell_count']}종목, 매수 {result['buy_count']}종목, 오류 {error_count}건")
+        if error_count > 0:
+            for i, error in enumerate(result['errors'], 1):
+                logging.error(f"오류 {i}/{error_count}: {error}")
+        
+        return result
 
     def _get_max_buy_stocks(self) -> int:
         '''최대 매수 종목 수 설정값 가져오기'''
@@ -569,3 +811,92 @@ class Trader:
         except (TypeError, ValueError) as e:
             logging.error(f"max_buy_stocks 설정값을 정수로 변환 실패. 기본값 3 사용: {str(e)}")
             return 3
+
+    def select_stocks_to_buy(self, max_count=3):
+        """
+        매수할 종목을 선정하는 함수
+        
+        Args:
+            max_count (int): 최대 매수 종목 수
+            
+        Returns:
+            List[Dict]: 매수 대상 종목 정보 리스트
+        """
+        try:
+            # 분석가로부터 추천 종목 가져오기
+            recommendations = self.tbm_strategy.generate_recommendations() or []
+            
+            # 리스트가 아닌 경우 처리
+            if not isinstance(recommendations, list):
+                logging.warning("매수 추천 종목이 리스트가 아닙니다. 빈 리스트로 변환합니다.")
+                recommendations = []
+            
+            # 값이 있는지 확인
+            if not recommendations:
+                logging.info("매수 추천 종목이 없습니다.")
+                return []
+            
+            # 현재 보유 중인 종목의 티커 추출
+            current_holdings = set()
+            for holding in self.holdings:
+                ticker = getattr(holding, 'ticker', None) or getattr(holding, 'symbol', None)
+                if ticker:
+                    current_holdings.add(ticker)
+            
+            # 이미 보유 중인 종목 제외
+            filtered_recommendations = []
+            for rec in recommendations:
+                ticker = rec.get('ticker', '') if isinstance(rec, dict) else rec
+                
+                if ticker not in current_holdings:
+                    filtered_recommendations.append(rec)
+                else:
+                    logging.info(f"{ticker}은(는) 이미 보유 중이므로 매수 대상에서 제외합니다.")
+            
+            # 최대 종목 수만큼 선택
+            buy_targets = filtered_recommendations[:max_count]
+            
+            # 매수할 종목이 없는 경우
+            if not buy_targets:
+                logging.info("매수 대상 종목이 없습니다.")
+                return []
+            
+            # 주문 가능한 형태로 가공
+            processed_targets = []
+            for target in buy_targets:
+                # 문자열 형태인 경우
+                if isinstance(target, str):
+                    try:
+                        # 시세 조회를 통한 가격 정보 가져오기
+                        quote = self.get_quote(target)
+                        target_data = {
+                            'ticker': target,
+                            'price': getattr(quote, 'price', 0),
+                            'name': getattr(quote, 'name', target)
+                        }
+                        processed_targets.append(target_data)
+                    except Exception as e:
+                        logging.error(f"{target} 시세 조회 실패: {str(e)}")
+                
+                # 딕셔너리 형태인 경우
+                elif isinstance(target, dict) and 'ticker' in target:
+                    # 이미 필요한 정보가 포함된 경우 그대로 사용
+                    if 'price' not in target or target['price'] <= 0:
+                        try:
+                            # 가격 정보 없는 경우 시세 조회
+                            quote = self.get_quote(target['ticker'])
+                            target['price'] = getattr(quote, 'price', 0)
+                        except Exception as e:
+                            logging.error(f"{target['ticker']} 시세 조회 실패: {str(e)}")
+                            # 기본 가격 설정
+                            target['price'] = target.get('price', 0)
+                    
+                    processed_targets.append(target)
+            
+            return processed_targets
+            
+        except Exception as e:
+            logging.error(f"매수 종목 선정 중 오류 발생: {str(e)}")
+            import traceback
+            logging.error(f"매수 종목 선정 상세 오류: {traceback.format_exc()}")
+            return []
