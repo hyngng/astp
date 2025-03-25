@@ -310,81 +310,122 @@ class Trader:
 
     def check_sell_conditions(self, ticker: str) -> Tuple[bool, Dict]:
         '''매도 결정을 위한 조건 확인'''
-        # 보유 종목이 아니면 매도할 수 없음
-        if ticker not in self.holdings:
-            return False, {'reason': '보유하지 않은 종목'}
-            
-        holding_info = self.holdings[ticker]
-        
         try:
-            # 1. 현재 시장 가격 확인 - 네트워크 오류에 대한 재시도 로직 포함
+            # 보유 종목 확인
+            holding_info = None
+            
+            # holdings가 딕셔너리인 경우
+            if isinstance(self.holdings, dict) and ticker in self.holdings:
+                holding_info = self.holdings[ticker]
+            # holdings가 리스트인 경우
+            elif isinstance(self.holdings, list):
+                for stock in self.holdings:
+                    stock_ticker = getattr(stock, 'ticker', None) or getattr(stock, 'symbol', None)
+                    if stock_ticker == ticker:
+                        # 객체를 딕셔너리로 변환하여 사용
+                        holding_info = {
+                            'quantity': getattr(stock, 'quantity', 0),
+                            'avg_price': getattr(stock, 'avg_price', 0) or getattr(stock, 'purchase_price', 0),
+                            'current_price': getattr(stock, 'price', 0) or getattr(stock, 'current_price', 0),
+                            'buy_date': getattr(stock, 'buy_date', datetime.now().strftime("%Y-%m-%d"))
+                        }
+                        break
+            
+            # 보유 종목이 아니면 매도할 수 없음
+            if not holding_info:
+                return False, {'reason': f'보유하지 않은 종목: {ticker}'}
+            
             try:
-                quote = self.get_quote(ticker)
-                current_price = quote.price
+                # 1. 현재 시장 가격 확인 - 네트워크 오류에 대한 재시도 로직 포함
+                try:
+                    quote = self.get_quote(ticker)
+                    current_price = quote.price
+                except Exception as e:
+                    logging.error(f"{ticker} 시세 조회 중 오류, 보유 정보의 현재가 사용: {str(e)}")
+                    # 오류 발생 시 보유 정보의 현재가 사용
+                    if isinstance(holding_info, dict):
+                        current_price = holding_info.get('current_price', 0)
+                    else:
+                        current_price = getattr(holding_info, 'current_price', 0) or getattr(holding_info, 'price', 0)
+                    
+                    if not current_price:
+                        return False, {'reason': f'시세 조회 실패: {str(e)}'}
+                
+                # 2. 손익률 계산
+                avg_price = holding_info['avg_price'] if isinstance(holding_info, dict) else getattr(holding_info, 'avg_price', 0)
+                if not avg_price:
+                    avg_price = getattr(holding_info, 'purchase_price', 0) if not isinstance(holding_info, dict) else 0
+                
+                if not avg_price:
+                    return False, {'reason': '평균 매수가격 정보 없음'}
+                    
+                profit_rate = (current_price - avg_price) / avg_price * 100
+                
+                # 3. TBM 전략으로 종목 분석
+                try:
+                    success, analysis = self.tbm_strategy.analyze(ticker)
+                except Exception as e:
+                    logging.error(f"{ticker} TBM 분석 중 오류: {str(e)}")
+                    success, analysis = False, {'signal': 'ERROR'}
+                
+                # 매도 신호 목록
+                sell_signals = []
+                
+                # 4. 매도 조건 확인
+                settings = self.config.get("trading_settings", {})
+                
+                # 손절점 도달
+                stop_loss = settings.get("stop_loss_threshold", -7.0)
+                if profit_rate <= stop_loss:
+                    sell_signals.append("손절점 도달")
+                    
+                # 익절점 도달
+                take_profit = settings.get("take_profit_threshold", 20.0)
+                if profit_rate >= take_profit:
+                    sell_signals.append("익절점 도달")
+                    
+                # TBM 전략에서 SELL 신호
+                if success and analysis.get('signal') == "SELL":
+                    sell_signals.append("TBM 매도 신호")
+                    
+                # 홀딩 기간 초과
+                max_holding_days = settings.get("max_holding_days", 30)
+                buy_date_str = holding_info['buy_date'] if isinstance(holding_info, dict) else getattr(holding_info, 'buy_date', datetime.now().strftime("%Y-%m-%d"))
+                
+                try:
+                    buy_date = datetime.strptime(buy_date_str, "%Y-%m-%d")
+                    days_held = (datetime.now() - buy_date).days
+                    if days_held > max_holding_days:
+                        sell_signals.append(f"홀딩 기간 초과 ({days_held}일)")
+                except (ValueError, TypeError):
+                    # 날짜 형식이 맞지 않거나 날짜 정보가 없는 경우
+                    pass
+                    
+                # 매도 결정 (신호가 하나라도 있으면 매도)
+                should_sell = len(sell_signals) > 0
+                
+                # 수량 정보 가져오기
+                quantity = holding_info['quantity'] if isinstance(holding_info, dict) else getattr(holding_info, 'quantity', 0)
+                
+                # 매도 정보
+                result = {
+                    'ticker': ticker,
+                    'current_price': current_price,
+                    'avg_price': avg_price,
+                    'profit_rate': profit_rate,
+                    'quantity': quantity,
+                    'sell_signals': sell_signals,
+                    'total_value': quantity * current_price
+                }
+                
+                return should_sell, result
+                
             except Exception as e:
-                logging.error(f"{ticker} 시세 조회 중 오류, 보유 정보의 현재가 사용: {str(e)}")
-                # 오류 발생 시 보유 정보의 현재가 사용
-                current_price = holding_info.get('current_price', 0)
-                if not current_price:
-                    return False, {'reason': f'시세 조회 실패: {str(e)}'}
-            
-            # 2. 손익률 계산
-            avg_price = holding_info['avg_price']
-            profit_rate = (current_price - avg_price) / avg_price * 100
-            
-            # 3. TBM 전략으로 종목 분석
-            try:
-                success, analysis = self.tbm_strategy.analyze(ticker)
-            except Exception as e:
-                logging.error(f"{ticker} TBM 분석 중 오류: {str(e)}")
-                success, analysis = False, {'signal': 'ERROR'}
-            
-            # 매도 신호 목록
-            sell_signals = []
-            
-            # 4. 매도 조건 확인
-            settings = self.config.get("trading_settings", {})
-            
-            # 손절점 도달
-            stop_loss = settings.get("stop_loss_threshold", -7.0)
-            if profit_rate <= stop_loss:
-                sell_signals.append("손절점 도달")
-                
-            # 익절점 도달
-            take_profit = settings.get("take_profit_threshold", 20.0)
-            if profit_rate >= take_profit:
-                sell_signals.append("익절점 도달")
-                
-            # TBM 전략에서 SELL 신호
-            if success and analysis['signal'] == "SELL":
-                sell_signals.append("TBM 매도 신호")
-                
-            # 홀딩 기간 초과
-            max_holding_days = settings.get("max_holding_days", 30)
-            buy_date = datetime.strptime(holding_info['buy_date'], "%Y-%m-%d")
-            days_held = (datetime.now() - buy_date).days
-            if days_held > max_holding_days:
-                sell_signals.append(f"홀딩 기간 초과 ({days_held}일)")
-                
-            # 매도 결정 (신호가 하나라도 있으면 매도)
-            should_sell = len(sell_signals) > 0
-            
-            # 매도 정보
-            result = {
-                'ticker': ticker,
-                'current_price': current_price,
-                'avg_price': avg_price,
-                'profit_rate': profit_rate,
-                'quantity': holding_info['quantity'],
-                'sell_signals': sell_signals,
-                'total_value': holding_info['quantity'] * current_price
-            }
-            
-            return should_sell, result
-            
+                logging.error(f"{ticker} 매도 조건 확인 중 오류 발생: {str(e)}")
+                return False, {'reason': f'오류: {str(e)}'}
         except Exception as e:
-            logging.error(f"{ticker} 매도 조건 확인 중 오류 발생: {str(e)}")
-            return False, {'reason': f'오류: {str(e)}'}
+            logging.error(f"{ticker} 매도 조건 확인 중 외부 오류: {str(e)}")
+            return False, {'reason': f'외부 오류: {str(e)}'}
 
     def submit_order(self, ticker, price, quantity, order_type="buy"):
         """주문 제출 함수 (매수/매도)"""
@@ -574,8 +615,23 @@ class Trader:
         # 보유 종목 정보 최신화
         self.update_holdings()
 
+        # 보유 종목 확인
+        if isinstance(self.holdings, dict):
+            # 딕셔너리 형태인 경우
+            tickers = list(self.holdings.keys())
+        elif isinstance(self.holdings, list):
+            # 리스트 형태인 경우
+            tickers = []
+            for stock in self.holdings:
+                ticker = getattr(stock, 'ticker', None) or getattr(stock, 'symbol', None)
+                if ticker:
+                    tickers.append(ticker)
+        else:
+            logging.error(f"보유 종목 정보 형식 오류: {type(self.holdings)}")
+            return []
+
         # 각 보유 종목에 대해 매도 조건 확인
-        for ticker in self.holdings:
+        for ticker in tickers:
             should_sell, result = self.check_sell_conditions(ticker)
 
             if should_sell:
@@ -670,7 +726,20 @@ class Trader:
                 # API 요청 간격 추가 (초당 요청 제한 대응)
                 time.sleep(2)
                 
-                sell_targets = self.check_all_sell_conditions()
+                # 보유 종목 확인
+                if not isinstance(self.holdings, list):
+                    # 객체가 리스트가 아닌 경우 (예: 딕셔너리인 경우)
+                    sell_targets = self.check_all_sell_conditions()
+                else:
+                    # 객체가 리스트인 경우, 각 항목을 순회하며 처리
+                    sell_targets = []
+                    for holding in self.holdings:
+                        ticker = getattr(holding, 'ticker', None) or getattr(holding, 'symbol', None)
+                        if ticker:
+                            should_sell, result_data = self.check_sell_conditions(ticker)
+                            if should_sell:
+                                sell_targets.append(result_data)
+            
                 if sell_targets:
                     logging.info(f"매도 대상 종목: {len(sell_targets)}개")
                     for ticker in sell_targets:
@@ -693,7 +762,7 @@ class Trader:
                                         ticker_price = getattr(holding, 'price', 0)
                                         ticker_qty = getattr(holding, 'quantity', 0)
                                         break
-                        
+                    
                             success = self.submit_order(ticker_symbol, ticker_price, ticker_qty, order_type="sell")
                             
                             if success:
@@ -727,7 +796,7 @@ class Trader:
                 max_buy_stocks = self._get_max_buy_stocks()
                 
                 # TBM 전략을 통한 추천 종목 가져오기
-                buy_targets = self.tbm_strategy.generate_recommendations(max_count=max_buy_stocks)
+                buy_targets = self.select_stocks_to_buy(max_count=max_buy_stocks)
                 
                 if buy_targets:
                     logging.info(f"매수 대상 종목: {len(buy_targets)}개 (최대 {max_buy_stocks}개)")
@@ -823,7 +892,7 @@ class Trader:
             List[Dict]: 매수 대상 종목 정보 리스트
         """
         try:
-            # 분석가로부터 추천 종목 가져오기
+            # 분석가로부터 추천 종목 가져오기 (max_count 인자 제거)
             recommendations = self.tbm_strategy.generate_recommendations() or []
             
             # 리스트가 아닌 경우 처리
