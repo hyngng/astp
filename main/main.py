@@ -2,6 +2,7 @@ from pykis import PyKis
 import logging
 import time as time_module  # time 모듈 이름 변경
 from datetime import datetime, timedelta, time as datetime_time  # time 클래스 이름 변경
+import time
 
 from module.analysts import *
 from module.traders import *
@@ -261,19 +262,68 @@ logging.basicConfig(
 )
 
 def main():
-    # 초기화 및 종목 분석
-    tickers = init()
-    analyze_tickers(tickers)
-    
-    # 주식 시장 개장 여부 확인
-    market_open = is_us_market_open(trader.kis)
-    if market_open:
-        logging.info("미국 주식 시장이 개장 중입니다.")
-        trading_result = trader.auto_trading_cycle()
-        logging.info(f"자동 매매 실행 결과: 매도 {trading_result['sell_count']}건, 매수 {trading_result['buy_count']}건")
-    else:
-        time_to_open = calculate_time_to_market_open()
-        logging.info(f"다음 개장까지 {time_to_open}초 남았습니다.")
+    """메인 실행 함수"""
+    try:
+        # 설정 로드
+        config = load_config()
+        
+        # KIS API 초기화
+        kis = init_kis(config)
+        
+        # 분석기 및 트레이더 초기화
+        analysts = init_analysts(kis, config)
+        trader = init_trader(kis, config)
+        
+        # 운영 사이클 설정
+        operating_cycle = config.get("system", {}).get("operating_cycle", 3600)  # 기본 1시간
+        
+        logging.info("자동 매매 프로그램 시작")
+        
+        while True:
+            try:
+                # 현재 시간 확인
+                now = datetime.now()
+                
+                # 미국 장 시작 시간 확인 (EDT 기준)
+                try:
+                    us_market_open = trader.get_trading_hours()
+                    if us_market_open:
+                        try:
+                            market_open_time = trader.kis.trading_hours("US").open_kst
+                            # 장 시작 1시간 전인지 확인
+                            is_pre_market = (market_open_time - timedelta(hours=1)).time() <= now.time() < market_open_time.time()
+                            
+                            if is_pre_market:
+                                logging.info("미국 장 시작 1시간 전 - 추가 매매 사이클 실행")
+                                result = trader.auto_trading_cycle()
+                                logging.info(f"추가 매매 사이클 결과: 매도 {result['sell_count']}종목, 매수 {result['buy_count']}종목")
+                        except Exception as e:
+                            logging.error(f"장 시작 시간 확인 중 오류 발생: {str(e)}")
+                            # 오류 발생 시에도 정상 매매 사이클 실행
+                except Exception as e:
+                    logging.error(f"미국 장 개장 여부 확인 중 오류 발생: {str(e)}")
+                    # 오류 발생 시에도 계속 진행
+                
+                # 정상 매매 사이클 실행
+                logging.info("정상 매매 사이클 실행")
+                result = trader.auto_trading_cycle()
+                logging.info(f"매매 사이클 결과: 매도 {result['sell_count']}종목, 매수 {result['buy_count']}종목")
+                
+                # 다음 사이클까지 대기
+                logging.info(f"다음 사이클까지 {operating_cycle}초 대기")
+                time.sleep(operating_cycle)
+                
+            except Exception as e:
+                logging.error(f"매매 사이클 실행 중 오류 발생: {str(e)}")
+                import traceback
+                logging.error(f"상세 오류: {traceback.format_exc()}")
+                time.sleep(60)  # 오류 발생 시 1분 대기 후 재시도
+                
+    except Exception as e:
+        logging.error(f"프로그램 실행 중 치명적 오류 발생: {str(e)}")
+        import traceback
+        logging.error(f"상세 오류: {traceback.format_exc()}")
+        raise
 
 if __name__ == '__main__':
     main()

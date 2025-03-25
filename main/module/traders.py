@@ -91,88 +91,118 @@ class Trader:
             # 모의투자 여부 확인
             is_virtual = self.config.get("api_info", {}).get("is_virtual", False)
 
+            # 스톡 객체 가져오기
+            stock = self.kis.stock(ticker)
+
             if is_virtual:
-                # 모의투자인 경우, 주문 성공으로 처리하고 로그만 남김
-                logging.info(f"모의투자 주문: {ticker} {order_type} {quantity}주 @ {price:,.0f}원")
-
-                # 매수 주문인 경우 보유 종목에 추가
-                if order_type == "buy":
-                    if ticker not in self.holdings:
-                        self.holdings[ticker] = {
-                            'quantity': quantity,
-                            'avg_price': price,
-                            'current_price': price,
-                            'total_value': price * quantity,
-                            'profit_loss': 0,
-                            'profit_loss_rate': 0,
-                            'buy_date': datetime.now().strftime("%Y-%m-%d")
-                        }
-                    else:
-                        # 기존 보유 종목인 경우 수량 추가
-                        old_quantity = self.holdings[ticker]['quantity']
-                        old_avg_price = self.holdings[ticker]['avg_price']
-                        new_quantity = old_quantity + quantity
-
-                        # 평균 단가 계산
-                        new_avg_price = (old_quantity * old_avg_price + quantity * price) / new_quantity
-
-                        self.holdings[ticker]['quantity'] = new_quantity
-                        self.holdings[ticker]['avg_price'] = new_avg_price
-                        self.holdings[ticker]['current_price'] = price
-                        self.holdings[ticker]['total_value'] = new_quantity * price
-
-                # 매도 주문인 경우 보유 종목에서 제거
-                if order_type == "sell" and ticker in self.holdings:
-                    remaining = self.holdings[ticker]['quantity'] - quantity
-                    if remaining <= 0:
-                        del self.holdings[ticker]
-                    else:
-                        self.holdings[ticker]['quantity'] = remaining
-                        self.holdings[ticker]['total_value'] = remaining * price
-
-                return True
-            else:
-                # 실제 주문 실행
-                stock = self.kis.stock(ticker)
-
-                # 주문 실행 - PyKis 라이브러리의 실제 주문 메서드 사용
+                # 모의투자인 경우, API를 통해 모의투자 주문 실행
+                logging.info(f"모의투자 주문 실행: {ticker} {order_type} {quantity}주 @ {price:,.0f}원")
+                
                 try:
-                    # 일반적인 접근법 시도
+                    # PyKis API를 사용한 모의투자 주문 실행
                     if order_type == "buy":
                         order = stock.buy(price=price, quantity=quantity)
                     else:
                         order = stock.sell(price=price, quantity=quantity)
-                except AttributeError:
-                    # 다른 주문 메서드 시도
-                    try:
-                        # 다른 메서드 이름 시도 (purchase/disposal)
+                    
+                    logging.info(f"모의투자 주문 전송 완료: {ticker} {order_type} {quantity}주 @ {price:,.0f}원")
+                    
+                    # 주문 성공 여부 확인
+                    if order:
+                        logging.info(f"모의투자 주문 성공: {ticker} {order_type} {quantity}주")
+                        
+                        # 매수 주문인 경우 보유 종목에 추가
                         if order_type == "buy":
-                            order = stock.purchase(price=price, quantity=quantity)
-                        else:
-                            order = stock.disposal(price=price, quantity=quantity)
-                    except AttributeError:
-                        # 또 다른 메서드 시도 (order 메서드에 type 인자 사용)
-                        order = stock.order(type=order_type, price=price, quantity=quantity)
+                            if ticker not in self.holdings:
+                                self.holdings[ticker] = {
+                                    'quantity': quantity,
+                                    'avg_price': price,
+                                    'current_price': price,
+                                    'total_value': price * quantity,
+                                    'profit_loss': 0,
+                                    'profit_loss_rate': 0,
+                                    'buy_date': datetime.now().strftime("%Y-%m-%d")
+                                }
+                            else:
+                                # 기존 보유 종목인 경우 수량 추가
+                                old_quantity = self.holdings[ticker]['quantity']
+                                old_avg_price = self.holdings[ticker]['avg_price']
+                                new_quantity = old_quantity + quantity
 
-                logging.info(f"주문 실행 완료: {ticker} {order_type} {quantity}주 @ {price:,.0f}원")
+                                # 평균 단가 계산
+                                new_avg_price = (old_quantity * old_avg_price + quantity * price) / new_quantity
 
-                # 매수 주문이 완료되면 보유 종목 정보 업데이트
-                if order_type == "buy" and order:
-                    self.update_holdings()
+                                self.holdings[ticker]['quantity'] = new_quantity
+                                self.holdings[ticker]['avg_price'] = new_avg_price
+                                self.holdings[ticker]['current_price'] = price
+                                self.holdings[ticker]['total_value'] = new_quantity * price
 
-                # 매도 주문이 완료되면 보유 종목에서 제거
-                if order_type == "sell" and order and ticker in self.holdings:
-                    remaining = self.holdings[ticker]['quantity'] - quantity
-                    if remaining <= 0:
-                        del self.holdings[ticker]
+                        # 매도 주문인 경우 보유 종목에서 제거
+                        if order_type == "sell" and ticker in self.holdings:
+                            remaining = self.holdings[ticker]['quantity'] - quantity
+                            if remaining <= 0:
+                                del self.holdings[ticker]
+                            else:
+                                self.holdings[ticker]['quantity'] = remaining
+                                self.holdings[ticker]['total_value'] = remaining * price
+                        
+                        return True
                     else:
-                        self.holdings[ticker]['quantity'] = remaining
+                        logging.error(f"모의투자 주문 실패: {ticker}")
+                        return False
+                    
+                except Exception as e:
+                    logging.error(f"모의투자 주문 실행 중 오류 발생: {str(e)}")
+                    import traceback
+                    logging.error(f"모의투자 주문 오류 상세: {traceback.format_exc()}")
+                    return False
+            else:
+                # 실제 주문 실행
+                try:
+                    # 주문 실행 - PyKis 라이브러리의 실제 주문 메서드 사용
+                    try:
+                        # 일반적인 접근법 시도
+                        if order_type == "buy":
+                            order = stock.buy(price=price, quantity=quantity)
+                        else:
+                            order = stock.sell(price=price, quantity=quantity)
+                    except AttributeError:
+                        # 다른 주문 메서드 시도
+                        try:
+                            # 다른 메서드 이름 시도 (purchase/disposal)
+                            if order_type == "buy":
+                                order = stock.purchase(price=price, quantity=quantity)
+                            else:
+                                order = stock.disposal(price=price, quantity=quantity)
+                        except AttributeError:
+                            # 또 다른 메서드 시도 (order 메서드에 type 인자 사용)
+                            order = stock.order(type=order_type, price=price, quantity=quantity)
 
-                return True
+                    logging.info(f"주문 실행 완료: {ticker} {order_type} {quantity}주 @ {price:,.0f}원")
+
+                    # 매수 주문이 완료되면 보유 종목 정보 업데이트
+                    if order_type == "buy" and order:
+                        self.update_holdings()
+
+                    # 매도 주문이 완료되면 보유 종목에서 제거
+                    if order_type == "sell" and order and ticker in self.holdings:
+                        remaining = self.holdings[ticker]['quantity'] - quantity
+                        if remaining <= 0:
+                            del self.holdings[ticker]
+                        else:
+                            self.holdings[ticker]['quantity'] = remaining
+
+                    return True
+
+                except Exception as e:
+                    logging.error(f"주문 실행 중 오류 발생: {str(e)}")
+                    # 스택 트레이스 로깅 추가
+                    import traceback
+                    logging.error(f"상세 오류: {traceback.format_exc()}")
+                    return False
 
         except Exception as e:
             logging.error(f"주문 실행 중 오류 발생: {str(e)}")
-            # 스택 트레이스 로깅 추가
             import traceback
             logging.error(f"상세 오류: {traceback.format_exc()}")
             return False
@@ -464,7 +494,7 @@ class Trader:
             else:
                 if is_virtual:
                     # 모의투자의 경우 고정된 매수 금액 사용
-                    buy_budget_per_stock = 10000  # 1천만원
+                    buy_budget_per_stock = 10000  # 1만원
                 else:
                     buy_budget_per_stock = (available_cash_float * budget_percentage / 100) / max(len(buy_targets), 1)
 

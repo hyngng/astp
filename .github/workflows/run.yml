@@ -103,7 +103,7 @@ jobs:
           echo "타임존이 설정되었습니다: $(date)"
 
       # config.yaml의 민감한 정보만 업데이트
-      - name: Update sensitive information in config.yaml
+      - name: Update informations from config.yaml
         run: |
           mkdir -p data
           
@@ -135,8 +135,8 @@ jobs:
           
           trading_settings:
             auto_trading_enabled: true
-            stop_loss_threshold: -7.0
-            take_profit_threshold: 20.0
+            stop_loss_threshold: -3.0
+            take_profit_threshold: 3.0
             max_holding_days: 30
             max_buy_stocks: ${{ github.event.inputs.max_buy_stocks || '3' }}
             budget_percentage: 30
