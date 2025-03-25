@@ -46,11 +46,12 @@ def init():
 
     return tickers
 
-def analyze_tickers(tickers):
+def analyze_tickers(tickers, analyst):
     '''주어진 종목들에 대해 MACD 분석을 수행하는 함수
 
     Args:
         tickers (list): 분석할 종목 코드 리스트
+        analyst: 분석에 사용할 분석기 객체
     '''
     # 신호 카운트 초기화
     golden_cross_count = 0
@@ -64,7 +65,7 @@ def analyze_tickers(tickers):
     
     # 각 종목 분석
     for ticker in tickers:
-        success, result = macd_analyst.get_macd(ticker)
+        success, result = analyst.get_macd(ticker)
         if success:
             if result['signal'] == 'GOLDEN_CROSS':
                 golden_cross_count += 1
@@ -311,7 +312,7 @@ def main():
             tickers = config["companies_settings"]["manual_tickers"]
             
         # 종목 분석
-        analyze_tickers(tickers)
+        analyze_tickers(tickers, analysts)
         
         # 운영 사이클 설정
         operating_cycle = config.get("system", {}).get("operating_cycle", 3600)  # 기본 1시간
