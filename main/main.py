@@ -261,6 +261,34 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s',
 )
 
+def load_config():
+    """설정 파일을 로드하는 함수"""
+    return load_secure_config('data/config.yaml')
+
+def init_kis(config):
+    """KIS API 초기화 함수"""
+    kis = PyKis(
+        id                = config["api_info"]["id"],
+        account           = config["api_info"]["account"],
+        appkey            = config["api_info"]["app_key"],
+        secretkey         = config["api_info"]["app_secret"],
+        virtual_id        = config["api_info"]["id"],
+        virtual_appkey    = config["api_info"]["virtual_app_key"],
+        virtual_secretkey = config["api_info"]["virtual_app_secret"],
+        keep_token        = True,
+    )
+    return kis
+
+def init_analysts(kis, config):
+    """분석기 초기화 함수"""
+    macd_analyst = MACD_Analyst(kis, config)
+    return macd_analyst
+
+def init_trader(kis, config):
+    """트레이더 초기화 함수"""
+    trader = Trader(kis, config)
+    return trader
+
 def main():
     """메인 실행 함수"""
     try:
@@ -273,6 +301,17 @@ def main():
         # 분석기 및 트레이더 초기화
         analysts = init_analysts(kis, config)
         trader = init_trader(kis, config)
+        
+        # 종목 목록 가져오기
+        tickers = []
+        if config["companies_settings"]["auto_fetch"]:
+            logging.info("나스닥 100 기업 목록을 자동으로 가져오는 중...")
+            tickers = Analyst.get_nasdaq_top_100()
+        else:
+            tickers = config["companies_settings"]["manual_tickers"]
+            
+        # 종목 분석
+        analyze_tickers(tickers)
         
         # 운영 사이클 설정
         operating_cycle = config.get("system", {}).get("operating_cycle", 3600)  # 기본 1시간
