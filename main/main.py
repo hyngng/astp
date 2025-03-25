@@ -201,22 +201,16 @@ def main():
         # 종목 분석
         analyze_tickers(tickers, analyst)
         
-        # 운영 사이클 설정
-        operating_cycle = config.get("system", {}).get("operating_cycle", 3600)  # 기본 1시간
+        logging.info("자동 매매 프로그램 시작 (일회성 실행)")
         
-        logging.info(f"자동 매매 프로그램 시작 (사이클: {operating_cycle}초)")
+        # 미국 장 시작 1시간 전인지 확인
+        if is_pre_market(trader):
+            execute_trading_cycle(trader, is_pre_market_cycle=True)
         
-        while True:
-            # 미국 장 시작 1시간 전인지 확인
-            if is_pre_market(trader):
-                execute_trading_cycle(trader, is_pre_market_cycle=True)
-            
-            # 정상 매매 사이클 실행
-            execute_trading_cycle(trader)
-            
-            # 다음 사이클까지 대기
-            logging.info(f"다음 사이클까지 {operating_cycle}초 대기")
-            time.sleep(operating_cycle)
+        # 정상 매매 사이클 실행
+        execute_trading_cycle(trader)
+        
+        logging.info("자동 매매 프로그램 종료 (일회성 실행 완료)")
             
     except KeyboardInterrupt:
         logging.info("사용자에 의해 프로그램이 종료되었습니다.")
