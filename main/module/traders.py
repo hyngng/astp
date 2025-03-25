@@ -3,6 +3,7 @@ from datetime import datetime
 import logging
 from typing import Dict, List, Tuple, Optional
 from module.analysts import TBM_Strategy
+import time
 
 class Trader:
     ''' 주문자: 매수&매도주문의 적절성을 판단 후 주문하는 클래스.
@@ -58,21 +59,45 @@ class Trader:
 
             # 보유 종목 정보 업데이트
             for stock in balance.stocks:
-                self.holdings[stock.symbol] = {
-                    'quantity': stock.quantity,
-                    'avg_price': stock.avg_price,
-                    'current_price': stock.current_price,
-                    'total_value': stock.total_value,
-                    'profit_loss': stock.profit_loss,
-                    'profit_loss_rate': stock.profit_loss_rate,
-                    'buy_date': datetime.now().strftime("%Y-%m-%d")  # 매수일은 정확한 정보가 없어 현재 날짜로 대체
-                }
+                # 주요 속성 안전하게 가져오기
+                symbol = getattr(stock, 'symbol', '')
+                quantity = getattr(stock, 'quantity', 0)
+                avg_price = getattr(stock, 'avg_price', None)
+                current_price = getattr(stock, 'current_price', None)
+                total_value = getattr(stock, 'total_value', None)
+                profit_loss = getattr(stock, 'profit_loss', None)
+                profit_loss_rate = getattr(stock, 'profit_loss_rate', None)
+                
+                # 해외 주식과 국내 주식의 속성명 차이 처리
+                if avg_price is None:
+                    avg_price = getattr(stock, 'purchase_price', 0) or getattr(stock, 'pchs_avg_pric', 0)
+                if current_price is None:
+                    current_price = getattr(stock, 'price', 0) or getattr(stock, 'now_pric', 0)
+                if total_value is None:
+                    total_value = getattr(stock, 'eval_amt', 0) or quantity * current_price
+                if profit_loss is None:
+                    profit_loss = getattr(stock, 'eval_pfls_amt', 0)
+                if profit_loss_rate is None:
+                    profit_loss_rate = getattr(stock, 'eval_pfls_rt', 0)
+                
+                if symbol:  # 심볼이 있는 경우에만 추가
+                    self.holdings[symbol] = {
+                        'quantity': quantity,
+                        'avg_price': avg_price,
+                        'current_price': current_price,
+                        'total_value': total_value,
+                        'profit_loss': profit_loss,
+                        'profit_loss_rate': profit_loss_rate,
+                        'buy_date': datetime.now().strftime("%Y-%m-%d")  # 매수일은 정확한 정보가 없어 현재 날짜로 대체
+                    }
 
             logging.info(f"보유 종목 정보 업데이트 완료: {len(self.holdings)}개 종목")
             return True
 
         except Exception as e:
             logging.error(f"보유 종목 정보 업데이트 실패: {str(e)}")
+            import traceback
+            logging.error(f"보유 종목 업데이트 상세 오류: {traceback.format_exc()}")
             return False
 
     def submit_order(self, ticker: str, price: float, quantity: int, order_type: str = "buy") -> bool:
@@ -99,11 +124,11 @@ class Trader:
                 logging.info(f"모의투자 주문 실행: {ticker} {order_type} {quantity}주 @ {price:,.0f}원")
                 
                 try:
-                    # PyKis API를 사용한 모의투자 주문 실행
+                    # PyKis API를 사용한 모의투자 주문 실행 - quantity 대신 qty 매개변수 사용
                     if order_type == "buy":
-                        order = stock.buy(price=price, quantity=quantity)
+                        order = stock.buy(price=price, qty=quantity)
                     else:
-                        order = stock.sell(price=price, quantity=quantity)
+                        order = stock.sell(price=price, qty=quantity)
                     
                     logging.info(f"모의투자 주문 전송 완료: {ticker} {order_type} {quantity}주 @ {price:,.0f}원")
                     
@@ -155,6 +180,23 @@ class Trader:
                     logging.error(f"모의투자 주문 실행 중 오류 발생: {str(e)}")
                     import traceback
                     logging.error(f"모의투자 주문 오류 상세: {traceback.format_exc()}")
+                    
+                    # 다른 매개변수 이름 시도
+                    try:
+                        logging.info(f"대체 매개변수로 재시도: {ticker} {order_type}")
+                        if order_type == "buy":
+                            # 다양한 매개변수 시도
+                            order = stock.buy(price=price, volume=quantity)
+                        else:
+                            order = stock.sell(price=price, volume=quantity)
+                        
+                        if order:
+                            logging.info(f"대체 매개변수로 주문 성공: {ticker} {order_type} {quantity}주")
+                            return True
+                    except Exception as e2:
+                        logging.error(f"대체 매개변수 시도 중 오류: {str(e2)}")
+                    
+                    # 주문 실패 가정
                     return False
             else:
                 # 실제 주문 실행
@@ -163,20 +205,20 @@ class Trader:
                     try:
                         # 일반적인 접근법 시도
                         if order_type == "buy":
-                            order = stock.buy(price=price, quantity=quantity)
+                            order = stock.buy(price=price, qty=quantity)
                         else:
-                            order = stock.sell(price=price, quantity=quantity)
+                            order = stock.sell(price=price, qty=quantity)
                     except AttributeError:
                         # 다른 주문 메서드 시도
                         try:
                             # 다른 메서드 이름 시도 (purchase/disposal)
                             if order_type == "buy":
-                                order = stock.purchase(price=price, quantity=quantity)
+                                order = stock.purchase(price=price, qty=quantity)
                             else:
-                                order = stock.disposal(price=price, quantity=quantity)
+                                order = stock.disposal(price=price, qty=quantity)
                         except AttributeError:
                             # 또 다른 메서드 시도 (order 메서드에 type 인자 사용)
-                            order = stock.order(type=order_type, price=price, quantity=quantity)
+                            order = stock.order(type=order_type, price=price, qty=quantity)
 
                     logging.info(f"주문 실행 완료: {ticker} {order_type} {quantity}주 @ {price:,.0f}원")
 
@@ -214,9 +256,23 @@ class Trader:
             Dict: 일별 손익 정보
         '''
         try:
-            # 일별 손익 조회
-            profit_loss = self.kis.inquire_daily_profit_loss()
-
+            # API 호출 속도 제한 문제를 방지하기 위한 재시도 로직
+            max_retries = 3
+            retry_delay = 2  # 초
+            
+            for retry in range(max_retries):
+                try:
+                    # 일별 손익 조회
+                    profit_loss = self.kis.inquire_daily_profit_loss()
+                    break  # 성공 시 루프 종료
+                except Exception as e:
+                    if "API 호출 횟수를 초과" in str(e) and retry < max_retries - 1:
+                        logging.warning(f"API 호출 제한 감지. {retry_delay}초 후 재시도 ({retry+1}/{max_retries})...")
+                        time.sleep(retry_delay)
+                        retry_delay *= 2  # 백오프 지연 시간 증가
+                    else:
+                        raise  # 다른 오류이거나 최대 재시도 횟수 초과 시 예외 발생
+            
             # 종목별 손익 상세
             details = []
             for stock in profit_loss.stocks:
@@ -237,6 +293,8 @@ class Trader:
 
         except Exception as e:
             logging.error(f"일별 손익 조회 중 오류 발생: {str(e)}")
+            import traceback
+            logging.error(f"일별 손익 조회 상세 오류: {traceback.format_exc()}")
             return None
 
     def check_sell_conditions(self, ticker: str) -> Tuple[bool, Dict]:
@@ -386,9 +444,13 @@ class Trader:
             Dict: 매매 사이클 실행 결과
         '''
         try:
+            # API 호출 간격 조절을 위한 지연 시간
+            api_call_delay = 1  # 초
+            
             # 1. 매도 실행
             try:
                 sell_candidates = self.check_all_sell_conditions()
+                time.sleep(api_call_delay)  # API 호출 속도 제한 방지
                 sell_results = self.execute_sell_orders(sell_candidates)
             except Exception as e:
                 logging.error(f"매도 실행 중 오류 발생: {str(e)}")
@@ -398,6 +460,7 @@ class Trader:
 
             # 2. 매수 추천 종목 확인
             try:
+                time.sleep(api_call_delay)  # API 호출 속도 제한 방지
                 buy_recommendations = self.tbm_strategy.generate_recommendations()
             except Exception as e:
                 logging.error(f"매수 추천 종목 확인 중 오류 발생: {str(e)}")
@@ -462,12 +525,21 @@ class Trader:
 
             # 3. 매수 종목 선정
             try:
-                max_buy_stocks = self.config.get("trading_settings", {}).get("max_buy_stocks", 3)
-                max_buy_stocks = int(max_buy_stocks) # 명시적으로 integer로 변환
-            except (TypeError, ValueError):
-                logging.error(f"max_buy_stocks 설정값을 정수로 변환 실패. 기본값 3으로 설정합니다. 설정값: {self.config.get('trading_settings', {}).get('max_buy_stocks')}")
+                max_buy_stocks_setting = self.config.get("trading_settings", {}).get("max_buy_stocks", "3")
+                # 만약 GitHub Actions 변수 패턴("${{")이 포함되어 있다면 기본값 사용
+                if isinstance(max_buy_stocks_setting, str) and "${{" in max_buy_stocks_setting:
+                    logging.warning(f"GitHub Actions 변수 패턴 감지: {max_buy_stocks_setting}. 기본값 3 사용.")
+                    max_buy_stocks = 3
+                else:
+                    try:
+                        max_buy_stocks = int(max_buy_stocks_setting)
+                    except (TypeError, ValueError):
+                        logging.error(f"max_buy_stocks 설정값을 정수로 변환 실패. 기본값 3으로 설정합니다. 설정값: {max_buy_stocks_setting}")
+                        max_buy_stocks = 3
+            except Exception as e:
+                logging.error(f"매수 종목 선정 중 오류 발생: {str(e)}")
                 max_buy_stocks = 3
-
+            
             # buy_recommendations이 리스트인지 확인하고 변환
             if not isinstance(buy_recommendations, list):
                 logging.warning("매수 추천 종목이 리스트가 아닙니다. 빈 리스트로 처리합니다.")
