@@ -160,9 +160,20 @@ def is_pre_market(trader, now=None):
     
     try:
         market_open_time = trader.kis.trading_hours("US").open_kst
-        return (market_open_time - timedelta(hours=1)).time() <= now.time() < market_open_time.time()
+        
+        # datetime.time 객체에서 1시간을 빼는 연산 오류 수정
+        # 날짜와 시간을 포함한 전체 datetime 객체를 생성하고 연산
+        today = datetime.now().date()
+        full_open_time = datetime.combine(today, market_open_time.time())
+        pre_market_time = full_open_time - timedelta(hours=1)
+        
+        # 현재 시간이 pre_market_time과 market_open_time 사이에 있는지 확인
+        current_time = datetime.combine(today, now.time())
+        return pre_market_time <= current_time < full_open_time
     except Exception as e:
         logging.error(f"장 시작 시간 확인 중 오류 발생: {str(e)}")
+        import traceback
+        logging.error(f"상세 오류: {traceback.format_exc()}")
         return False
 
 def execute_trading_cycle(trader, is_pre_market_cycle=False):
