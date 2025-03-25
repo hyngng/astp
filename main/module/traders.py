@@ -447,11 +447,26 @@ class Trader:
 
             # 4. 매수 금액 설정
             budget_percentage = self.config.get("trading_settings", {}).get("budget_percentage", 30)
-            if is_virtual:
-                # 모의투자의 경우 고정된 매수 금액 사용
-                buy_budget_per_stock = 100000  # 1천만원
+            
+            # 보유주식 총액 계산
+            total_holdings_value = 0
+            for ticker, holding_info in self.holdings.items():
+                if 'total_value' in holding_info:
+                    total_holdings_value += holding_info['total_value']
+            
+            # 보유주식 금액이 10만원 이하면 매수 금액을 1만원으로 제한
+            if total_holdings_value <= 100000:
+                logging.info(f"보유주식 총액이 10만원 이하({total_holdings_value:,.0f}원)이므로 매수 금액을 1만원으로 제한합니다.")
+                if is_virtual:
+                    buy_budget_per_stock = 10000  # 1만원
+                else:
+                    buy_budget_per_stock = min(10000, (available_cash_float * budget_percentage / 100) / max(len(buy_targets), 1))
             else:
-                buy_budget_per_stock = (available_cash_float * budget_percentage / 100) / max(len(buy_targets), 1)
+                if is_virtual:
+                    # 모의투자의 경우 고정된 매수 금액 사용
+                    buy_budget_per_stock = 10000  # 1천만원
+                else:
+                    buy_budget_per_stock = (available_cash_float * budget_percentage / 100) / max(len(buy_targets), 1)
 
             # 5. 매수 실행
             buy_results = []
