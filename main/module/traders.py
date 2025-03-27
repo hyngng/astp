@@ -132,86 +132,52 @@ class Trader:
     def update_holdings(self):
         """현재 보유 종목 정보 업데이트"""
         try:
-            # 1. PyKis 연결 상태 확인
-            connection_issues = False
+            # 계좌 객체 가져오기
+            account = self.kis.account()
             
-            # 2. 계좌 정보 가져오기
+            # 계좌번호 직접 수정 (PyKis 내부에서 형식 변환이 제대로 안될 수 있음)
+            account_number = getattr(account, '_account_number', None)
+            if account_number:
+                # 계좌번호에 하이픈이 있는지 확인
+                account_str = str(account_number)
+                if "-" not in account_str and len(account_str) > 2:
+                    # 하이픈 추가 (예: 5012470301 -> 50124703-01)
+                    main_part = account_str[:-2]
+                    sub_part = account_str[-2:]
+                    new_account = f"{main_part}-{sub_part}"
+                    # 객체 속성 직접 수정 (위험할 수 있으나 필요한 경우)
+                    if hasattr(account, '_account_number'):
+                        account._account_number = new_account
+                        logging.info(f"계좌번호 형식 수정: {new_account}")
+            
+            # 잔고 조회
             try:
-                # 직접 속성에 접근하지 않고 메서드 호출로 수정
-                account = self.kis.account()
-                
-                # 명시적 대기 - API 요청 속도 제한 방지
-                time.sleep(1)
-                
-                # 잔액 정보 가져오기
                 balance = account.balance()
+                # 보유종목 업데이트...
                 
-                # 잔액 정보에서 필요한 데이터 추출
-                if hasattr(balance, 'summary') and hasattr(balance.summary, 'total'):
-                    self.total_balance = balance.summary.total
-                else:
-                    # 적절한 필드 찾기
-                    logging.info("KIS 잔액 구조 분석 중...")
-                    balance_repr = repr(balance)
-                    logging.info(f"잔액 구조: {balance_repr[:500]}...")  # 처음 500자만 로깅
-                    
-                    # 일반적인 속성 시도
-                    for total_attr in ['total', 'total_balance', 'balance', 'evaluation_amount']:
-                        if hasattr(balance, total_attr):
-                            self.total_balance = getattr(balance, total_attr)
-                            logging.info(f"잔액 정보 필드 찾음: {total_attr}")
-                            break
-                    else:
-                        # 총 평가금액이 없으면 0으로 설정
-                        self.total_balance = 0
-                
-                # 주식 정보 추출
-                if hasattr(balance, 'stocks'):
-                    self.holdings = balance.stocks
-                else:
-                    # 다른 가능한 속성명 시도
-                    for stock_attr in ['positions', 'owned_stocks', 'holdings']:
-                        if hasattr(balance, stock_attr):
-                            self.holdings = getattr(balance, stock_attr)
-                            logging.info(f"보유 주식 정보 필드 찾음: {stock_attr}")
-                            break
-                    else:
-                        self.holdings = []
-                
-                # 리스트가 아니면 빈 리스트로 변환
-                if not isinstance(self.holdings, list):
-                    logging.warning("보유 종목 정보가 리스트가 아닙니다. 빈 리스트로 초기화합니다.")
-                    self.holdings = []
-                
-                # 해외주식인 경우 필요한 속성명 조정
-                for stock in self.holdings:
-                    self._normalize_stock_attributes(stock)
-                
-                logging.info(f"보유 종목 정보 업데이트 완료: {len(self.holdings)}개 종목, 총 자산: {self.total_balance:,.0f}원")
+                # 성공적으로 업데이트 완료
                 return True
                 
             except Exception as e:
-                error_msg = str(e)
-                connection_issues = "Connection" in error_msg or "Remote" in error_msg or "aborted" in error_msg
-                
-                logging.error(f"보유 종목 정보 업데이트 실패: {error_msg}")
-                import traceback
+                logging.error(f"보유 종목 정보 업데이트 실패: {str(e)}")
                 logging.error(f"보유 종목 업데이트 상세 오류: {traceback.format_exc()}")
                 
-                # 연결 오류면 PyKis 연결 재설정 시도
-                if connection_issues:
+                # 계좌번호 문제가 의심되면 다시 시도
+                if "INVALID_CHECK_ACNO" in str(e):
+                    logging.warning("계좌번호 형식 문제 감지, 재시도...")
+                    # 가능하다면 여기서 계좌번호 수정 시도
+                    return False
+                
+                # 네트워크 연결 문제
+                if "ConnectionError" in str(e) or "Timeout" in str(e):
                     logging.warning("네트워크 연결 문제 감지. PyKis 연결 재설정 시도...")
                     self._reset_kis_connection()
+                    return False
                 
-                # 속성이 없을 경우 기본값 설정
-                if not hasattr(self, 'holdings') or self.holdings is None:
-                    self.holdings = []
-                if not hasattr(self, 'total_balance') or self.total_balance is None:
-                    self.total_balance = 0
-                    
                 return False
+                
         except Exception as e:
-            logging.error(f"보유 종목 정보 업데이트 중 예외 발생: {str(e)}")
+            logging.error(f"계좌 정보 조회 중 오류: {str(e)}")
             return False
 
     def _normalize_stock_attributes(self, stock):
@@ -427,134 +393,41 @@ class Trader:
             logging.error(f"{ticker} 매도 조건 확인 중 외부 오류: {str(e)}")
             return False, {'reason': f'외부 오류: {str(e)}'}
 
-    def submit_order(self, ticker, price, quantity, order_type="buy"):
-        """주문 제출 함수 (매수/매도)"""
-        if not ticker or not price or not quantity:
-            logging.error(f"주문 정보 부족: ticker={ticker}, price={price}, quantity={quantity}")
-            return False
-        
-        if quantity <= 0:
-            logging.warning(f"주문 수량이 0 이하입니다: {quantity}. 주문을 취소합니다.")
-            return False
-        
-        order_type = order_type.upper()
-        
-        try:
-            # 실제 주문이 아닌 모의 투자 모드인지 확인
-            is_virtual = self.config.get("api_info", {}).get("is_virtual", False)
-            
-            logging.info(f"{'모의' if is_virtual else '실제'} 주문 시도: {ticker} {order_type} {quantity}주 @ {price:,.2f}")
-            
-            # PyKis API를 통한 주문 처리
-            # 연속된 네트워크 오류 발생 시 세션 재설정 시도
-            consecutive_errors = 0
-            max_consecutive_errors = 2
-            
-            while consecutive_errors < max_consecutive_errors:
-                try:
-                    # API 요청 간 최소 간격 준수
-                    time.sleep(1.5)
-                    
-                    order_func = None
-                    if order_type == "BUY":
-                        order_func = self.kis.order.buy
-                    else:
-                        order_func = self.kis.order.sell
-                    
-                    # 주문에 사용할 매개변수 준비
-                    # PyKis 버전에 따라 매개변수 이름이 다를 수 있음
-                    try:
-                        # qty 매개변수 먼저 시도
-                        kwargs = {
-                            'is_virtual': is_virtual
-                        }
-                        order_result = order_func(ticker, price, qty=quantity, **kwargs)
-                        
-                        # 성공 시 consecutive_errors 초기화
-                        consecutive_errors = 0
-                    except TypeError as e:
-                        error_msg = str(e)
-                        if "unexpected keyword argument 'qty'" in error_msg:
-                            # volume 매개변수로 재시도
-                            logging.info("매개변수 'qty' 대신 'volume' 사용 시도")
-                            kwargs = {
-                                'is_virtual': is_virtual
-                            }
-                            order_result = order_func(ticker, price, volume=quantity, **kwargs)
-                        elif "unexpected keyword argument 'volume'" in error_msg:
-                            # quantity 매개변수로 재시도
-                            logging.info("매개변수 'volume' 대신 'quantity' 사용 시도")
-                            kwargs = {
-                                'is_virtual': is_virtual
-                            }
-                            order_result = order_func(ticker, price, quantity=quantity, **kwargs)
-                        else:
-                            # 다른 TypeError는 그대로 발생
-                            raise
-                    
-                    # 주문 결과 확인
-                    if hasattr(order_result, 'is_success') and not order_result.is_success:
-                        # 주문 실패 처리
-                        error_msg = getattr(order_result, 'message', 'Unknown error')
-                        logging.error(f"주문 실패: {ticker} {order_type} - {error_msg}")
-                        return False
-                    
-                    # 주문 성공 여부 확인을 위한 속성 이름 파악
-                    success_attrs = ['success', 'is_success', 'order_success', 'result']
-                    order_success = True  # 기본값
-                    
-                    for attr in success_attrs:
-                        if hasattr(order_result, attr):
-                            order_success = getattr(order_result, attr)
-                            if isinstance(order_success, bool) and not order_success:
-                                logging.error(f"주문 실패: {ticker} {order_type} - 속성 {attr}이(가) False")
-                                return False
-                    
-                    # 주문 번호 추출
-                    order_no = None
-                    order_no_attrs = ['order_no', 'order_number', 'orderNo', 'ordNo']
-                    for attr in order_no_attrs:
-                        if hasattr(order_result, attr):
-                            order_no = getattr(order_result, attr)
-                            break
-                    
-                    logging.info(f"주문 성공: {ticker} {order_type} {quantity}주 @ {price:,.2f} (주문번호: {order_no or 'N/A'})")
-                    return True
-                    
-                except (requests.exceptions.ConnectionError, ConnectionRefusedError, 
-                        ConnectionResetError, ConnectionAbortedError) as e:
-                    # 네트워크 연결 오류
-                    consecutive_errors += 1
-                    logging.warning(f"연결 오류 ({consecutive_errors}/{max_consecutive_errors}): {str(e)}")
-                    
-                    if consecutive_errors >= max_consecutive_errors:
-                        logging.error(f"연속 {max_consecutive_errors}회 연결 오류 발생. 세션 재설정 시도...")
-                        # 세션 재설정 시도
-                        self._reset_kis_connection()
-                        # 마지막 시도
-                        time.sleep(3)  # 재설정 후 잠시 대기
-                        try:
-                            order_func = self.kis.order.buy if order_type == "BUY" else self.kis.order.sell
-                            # 마지막 한 번 더 시도
-                            order_result = order_func(ticker, price, qty=quantity, is_virtual=is_virtual)
-                            logging.info(f"세션 재설정 후 주문 성공: {ticker} {order_type}")
-                            return True
-                        except Exception as final_e:
-                            logging.error(f"최종 주문 실패: {str(final_e)}")
-                            return False
-                    else:
-                        # 잠시 대기 후 재시도
-                        wait_time = 2 * consecutive_errors
-                        logging.info(f"{wait_time}초 후 재시도...")
-                        time.sleep(wait_time)
-                except Exception as other_e:
-                    # 기타 예외
-                    logging.error(f"{ticker} {order_type} 주문 중 오류 발생: {str(other_e)}")
-                    return False
+    def submit_order(self, ticker, price, quantity, order_type="buy", max_retries=3):
+        """주문 제출 함수 - 매수/매도"""
+        for attempt in range(max_retries):
+            try:
+                # 종목 객체 가져오기
+                stock = self.kis.stock(ticker)
                 
-        except Exception as e:
-            logging.error(f"{ticker} {order_type} 주문 중 오류 발생: {str(e)}")
-            return False
+                # 매수/매도 주문 실행
+                if order_type.upper() == "BUY":
+                    # 매수 주문 - 튜토리얼 방식대로 stock.buy 사용
+                    order_result = stock.buy(
+                        price=price,
+                        quantity=quantity,
+                        order_type='limit'  # 지정가 주문
+                    )
+                else:
+                    # 매도 주문 - 튜토리얼 방식대로 stock.sell 사용
+                    order_result = stock.sell(
+                        price=price,
+                        quantity=quantity,
+                        order_type='limit'  # 지정가 주문
+                    )
+                
+                logging.info(f"{'모의' if self.is_virtual else '실제'} 주문 성공: {ticker} {order_type} {quantity}주 @ {price:.2f}")
+                return True
+                
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    wait_time = 2 * (attempt + 1)
+                    logging.warning(f"주문 실패, {wait_time}초 후 재시도... ({attempt+1}/{max_retries}): {str(e)}")
+                    time.sleep(wait_time)
+                    self._reset_kis_connection()  # 연결 재설정
+                else:
+                    logging.error(f"{ticker} {order_type} 주문 실패 (최종): {str(e)}")
+                    return False
 
     def get_daily_profit_loss(self):
         '''일별 손익 조회

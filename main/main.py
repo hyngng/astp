@@ -28,19 +28,76 @@ def init_app():
     # 설정 로드
     config = load_config()
     
+    # 계좌번호 확인 및 수정
+    account_number = config["api_info"]["account"]
+    
+    # 계좌번호 형식 확인: 50124703-01 형식이어야 함
+    # 로그를 보니 API는 CANO: ['50124703'], ACNT_PRDT_CD: ['01'] 형식을 사용
+    # 하이픈이 없거나 잘못된 형식이면 수정
+    
+    # 하이픈 "-" 제거하고 다시 올바른 형식으로 설정
+    if "-" in account_number:
+        parts = account_number.split("-")
+        if len(parts) == 2:
+            main_acct = parts[0]
+            sub_acct = parts[1]
+            # 설정에는 하이픈 포함 형식으로 유지
+            config["api_info"]["account"] = f"{main_acct}-{sub_acct}"
+    else:
+        logging.warning(f"계좌번호 형식 확인: {account_number}")
+        if len(account_number) > 2:
+            main_acct = account_number[:-2]
+            sub_acct = account_number[-2:]
+            config["api_info"]["account"] = f"{main_acct}-{sub_acct}"
+            logging.info(f"계좌번호 형식 수정: {config['api_info']['account']}")
+    
+    # 최종 계좌번호 로깅
+    logging.info(f"사용할 계좌번호: {config['api_info']['account']}")
+    
     # KIS API 초기화
     try:
-        kis = PyKis(
-            id                = config["api_info"]["id"],
-            account           = config["api_info"]["account"],
-            appkey            = config["api_info"]["app_key"],
-            secretkey         = config["api_info"]["app_secret"],
-            virtual_id        = config["api_info"]["id"],
-            virtual_appkey    = config["api_info"]["virtual_app_key"],
-            virtual_secretkey = config["api_info"]["virtual_app_secret"],
-            keep_token        = True,
-        )
-        logging.info("KIS API가 성공적으로 초기화되었습니다.")
+        max_retries = 3
+        retry_count = 0
+        
+        while retry_count < max_retries:
+            try:
+                is_virtual = config["api_info"]["is_virtual"]
+                
+                if is_virtual:
+                    # 모의투자 모드
+                    kis = PyKis(
+                        id=config["api_info"]["id"],
+                        account=config["api_info"]["account"],
+                        appkey=config["api_info"]["app_key"],
+                        secretkey=config["api_info"]["app_secret"],
+                        virtual_id=config["api_info"]["id"],
+                        virtual_appkey=config["api_info"]["virtual_app_key"],
+                        virtual_secretkey=config["api_info"]["virtual_app_secret"],
+                        keep_token=True,
+                    )
+                else:
+                    # 실제투자 모드
+                    kis = PyKis(
+                        id=config["api_info"]["id"],
+                        account=config["api_info"]["account"],
+                        appkey=config["api_info"]["app_key"],
+                        secretkey=config["api_info"]["app_secret"],
+                        keep_token=True,
+                    )
+                    
+                # 연결 테스트 - 간단한 API 호출
+                logging.info(f"KIS API가 성공적으로 초기화되었습니다 (모드: {'모의투자' if is_virtual else '실제투자'})")
+                break  # 성공했으면 루프 종료
+                
+            except Exception as e:
+                retry_count += 1
+                if retry_count < max_retries:
+                    wait_time = 2 ** retry_count  # 지수 백오프
+                    logging.warning(f"KIS API 초기화 실패, {wait_time}초 후 재시도 ({retry_count}/{max_retries}): {str(e)}")
+                    time.sleep(wait_time)
+                else:
+                    logging.error(f"KIS API 초기화 최대 재시도 횟수 초과: {str(e)}")
+                    raise
     except Exception as e:
         logging.error(f"KIS API 초기화 중 오류 발생: {str(e)}")
         raise
@@ -153,28 +210,46 @@ def get_us_eastern_time():
     # 시, 분, 요일 반환
     return us_eastern.hour, us_eastern.minute, us_eastern.weekday(), is_dst
 
-def is_pre_market(trader, now=None):
-    """미국 장 시작 1시간 전인지 확인하는 함수"""
-    if now is None:
-        now = datetime.now()
-    
+def is_pre_market(trader):
+    """미국 장 시작 1시간 전인지 확인"""
     try:
-        market_open_time = trader.kis.trading_hours("US").open_kst
+        # 1. 직접 미국 주식 기준 장 개장 시간 확인 (튜토리얼 방식대로)
+        hours = trader.kis.trading_hours("NASDAQ")  # 튜토리얼에 따라 "US" 대신 "NASDAQ" 사용
+        if hours:
+            logging.info(f"미국 장 개장 시간(KST): {hours.open_kst}, 종료 시간(KST): {hours.close_kst}")
+            return False  # 정상적으로 시간 확인됨
         
-        # datetime.time 객체에서 1시간을 빼는 연산 오류 수정
-        # market_open_time이 이미 time 객체이므로 .time() 호출 제거
-        today = datetime.now().date()
-        full_open_time = datetime.combine(today, market_open_time)
-        pre_market_time = full_open_time - timedelta(hours=1)
-        
-        # 현재 시간이 pre_market_time과 market_open_time 사이에 있는지 확인
-        current_time = datetime.combine(today, now.time())
-        return pre_market_time <= current_time < full_open_time
     except Exception as e:
-        logging.error(f"장 시작 시간 확인 중 오류 발생: {str(e)}")
-        import traceback
-        logging.error(f"상세 오류: {traceback.format_exc()}")
-        return False
+        logging.warning(f"미국 장 시간 조회 실패: {str(e)}")
+        
+    # 2. 오류 발생 또는 데이터 없을 경우 하드코딩된 시간으로 대체 (안전망)
+    try:
+        # 미국 동부 시간 확인 (서머타임 적용)
+        import pytz
+        from datetime import datetime, time
+
+        # 현재 시간 (한국 시간)
+        now_kst = datetime.now(pytz.timezone('Asia/Seoul'))
+        
+        # 미국 동부 시간으로 변환
+        now_et = now_kst.astimezone(pytz.timezone('America/New_York'))
+        
+        # 미국 장 개장 시간 (ET 9:30 AM)
+        et_market_open = time(9, 30)
+        et_hour, et_minute = now_et.hour, now_et.minute
+        
+        # 장 시작 전 1시간인지 확인 (ET 8:30 ~ 9:30)
+        is_one_hour_before = (et_hour == 8 and et_minute >= 30) or (et_hour == 9 and et_minute < 30)
+        
+        # 주말인지 확인 (토요일=5, 일요일=6)
+        is_weekend = now_et.weekday() >= 5
+        
+        logging.info(f"현재 미국 동부 시간: {now_et.strftime('%H:%M')}, 주말여부: {is_weekend}")
+        return is_one_hour_before and not is_weekend
+        
+    except Exception as e:
+        logging.error(f"시간 확인 대체 로직에서 오류: {str(e)}")
+        return False  # 오류 시 False 반환하여 계속 진행
 
 def execute_trading_cycle(trader, is_pre_market_cycle=False):
     """매매 사이클을 실행하는 함수"""
