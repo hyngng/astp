@@ -86,7 +86,6 @@ def init_app():
                     )
                     
                 # 연결 테스트 - 간단한 API 호출
-                kis.health_check()  # 튜토리얼에 따라 건강 체크 함수로 연결 확인
                 logging.info(f"KIS API가 성공적으로 초기화되었습니다 (모드: {'모의투자' if is_virtual else '실제투자'})")
                 break  # 성공했으면 루프 종료
                 
