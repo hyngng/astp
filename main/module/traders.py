@@ -5,6 +5,7 @@ from typing import Dict, List, Tuple, Optional
 import sys
 import os
 import traceback
+import time
 
 # 상대 경로 문제 해결을 위한 경로 추가
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -38,10 +39,6 @@ except ModuleNotFoundError:
                 def analyze(self, *args, **kwargs):
                     logging.warning("대체 TBM_Strategy.analyze 호출됨")
                     return False, {"signal": "HOLD"}
-
-import time
-import random
-import requests
 
 class Trader:
     ''' 주문자: 매수&매도주문의 적절성을 판단 후 주문하는 클래스.
@@ -447,107 +444,97 @@ class Trader:
             
             logging.info(f"{'모의' if is_virtual else '실제'} 주문 시도: {ticker} {order_type} {quantity}주 @ {price:,.2f}")
             
-            # 계좌 객체 가져오기
-            account = self.kis.account()
-            
-            # 오류 로그에서 확인한 함수명 사용
+            # 튜토리얼에 맞게 stock 객체 사용
             try:
+                stock = self.kis.stock(ticker)
+                
+                # 튜토리얼 방식대로 buy/sell 메서드 호출
                 if order_type == "BUY":
-                    # 'account_product_buy' 메서드 사용 시도
-                    try:
-                        order_result = account.account_product_buy(
-                            ticker,
-                            price,
-                            volume=quantity  # 오류 로그에서 확인됨: quantity 대신 volume 사용
-                        )
-                        logging.info(f"주문 성공: {ticker} {order_type} {quantity}주 @ {price:,.2f}")
-                        return True
-                    except Exception as e:
-                        logging.warning(f"account_product_buy 호출 실패: {str(e)}")
-                        
-                        # 다른 방식 시도
-                        if hasattr(account, 'domestic_buy'):
-                            order_result = account.domestic_buy(ticker, price, volume=quantity)
-                            logging.info(f"주문 성공(domestic_buy): {ticker} {order_type} {quantity}주 @ {price:,.2f}")
-                            return True
-                        elif hasattr(account, 'overseas_buy'):
-                            order_result = account.overseas_buy(ticker, price, volume=quantity)
-                            logging.info(f"주문 성공(overseas_buy): {ticker} {order_type} {quantity}주 @ {price:,.2f}")
-                            return True
-                else:
-                    # 'account_product_sell' 메서드 사용 시도
-                    try:
-                        order_result = account.account_product_sell(
-                            ticker,
-                            price,
-                            volume=quantity  # 오류 로그에서 확인됨: quantity 대신 volume 사용
-                        )
-                        logging.info(f"주문 성공: {ticker} {order_type} {quantity}주 @ {price:,.2f}")
-                        return True
-                    except Exception as e:
-                        logging.warning(f"account_product_sell 호출 실패: {str(e)}")
-                        
-                        # 다른 방식 시도
-                        if hasattr(account, 'domestic_sell'):
-                            order_result = account.domestic_sell(ticker, price, volume=quantity)
-                            logging.info(f"주문 성공(domestic_sell): {ticker} {order_type} {quantity}주 @ {price:,.2f}")
-                            return True
-                        elif hasattr(account, 'overseas_sell'):
-                            order_result = account.overseas_sell(ticker, price, volume=quantity)
-                            logging.info(f"주문 성공(overseas_sell): {ticker} {order_type} {quantity}주 @ {price:,.2f}")
-                            return True
-                
-                # 사용 가능한 모든 buy/sell 관련 메서드 확인
-                logging.info("가능한 주문 메서드 확인 중...")
-                methods = [m for m in dir(account) if ('buy' in m.lower() or 'sell' in m.lower()) and callable(getattr(account, m))]
-                logging.info(f"사용 가능한 주문 메서드: {methods}")
-                
-                # 적합한 메서드가 있다면 시도
-                for method_name in methods:
-                    if (order_type == "BUY" and 'buy' in method_name.lower()) or \
-                       (order_type == "SELL" and 'sell' in method_name.lower()):
-                        try:
-                            method = getattr(account, method_name)
-                            # 다양한 매개변수 조합 시도
-                            try:
-                                # 가장 일반적인 패턴 시도
-                                result = method(ticker, price, volume=quantity)
-                                logging.info(f"주문 성공({method_name}, volume): {ticker} {order_type} {quantity}주 @ {price:,.2f}")
-                                return True
-                            except TypeError:
-                                # price를 두 번째 인자로 주지 않는 경우 시도
-                                try:
-                                    result = method(ticker, volume=quantity, price=price)
-                                    logging.info(f"주문 성공({method_name}, 키워드 인자): {ticker} {order_type} {quantity}주 @ {price:,.2f}")
-                                    return True
-                                except:
-                                    pass
-                        except Exception as e:
-                            logging.warning(f"{method_name} 메서드 호출 실패: {str(e)}")
-                
-                # 여전히 실패하면 stock 객체 시도
-                try:
-                    stock = self.kis.stock(ticker)
-                    if order_type == "BUY":
-                        order_result = stock.buy(price=price, quantity=quantity)
-                    else:
-                        order_result = stock.sell(price=price, quantity=quantity)
-                    logging.info(f"주문 성공(stock 객체): {ticker} {order_type} {quantity}주 @ {price:,.2f}")
+                    # qty 매개변수 사용
+                    order_result = stock.buy(price=price, qty=quantity)
+                    logging.info(f"주문 성공: {ticker} {order_type} {quantity}주 @ {price:,.2f}")
                     return True
-                except Exception as e:
-                    logging.error(f"stock 객체 주문 실패: {str(e)}")
-                
-                logging.error(f"{ticker} {order_type} 주문 실패: 모든 방법 시도 실패")
-                return False
+                else:
+                    # 매도 주문
+                    order_result = stock.sell(price=price, qty=quantity)
+                    logging.info(f"주문 성공: {ticker} {order_type} {quantity}주 @ {price:,.2f}")
+                    return True
                 
             except Exception as e:
-                logging.error(f"{ticker} {order_type} 주문 처리 중 오류: {str(e)}")
-                import traceback
-                logging.error(f"주문 오류 상세: {traceback.format_exc()}")
+                logging.warning(f"stock.buy/sell 호출 실패: {str(e)}")
+                
+                # 예외 정보에서 매개변수 오류 확인
+                if "argument" in str(e).lower() and "qty" in str(e).lower():
+                    # qty 대신 volume 시도
+                    try:
+                        if order_type == "BUY":
+                            order_result = stock.buy(price=price, volume=quantity)
+                        else:
+                            order_result = stock.sell(price=price, volume=quantity)
+                        logging.info(f"주문 성공(volume 매개변수): {ticker} {order_type} {quantity}주 @ {price:,.2f}")
+                        return True
+                    except Exception as vol_err:
+                        logging.warning(f"volume 매개변수로 재시도 실패: {str(vol_err)}")
+                
+                # 다른 방식 시도 (기존 코드)
+                try:
+                    # 계좌 객체 가져오기
+                    account = self.kis.account()
+                    
+                    if order_type == "BUY":
+                        # 'account_product_buy' 메서드 사용 시도
+                        try:
+                            order_result = account.account_product_buy(
+                                ticker,
+                                price,
+                                volume=quantity
+                            )
+                            logging.info(f"주문 성공(account_product_buy): {ticker} {order_type} {quantity}주 @ {price:,.2f}")
+                            return True
+                        except Exception as acc_err:
+                            logging.warning(f"account_product_buy 호출 실패: {str(acc_err)}")
+                            
+                            # 다른 방식 시도
+                            if hasattr(account, 'domestic_buy'):
+                                order_result = account.domestic_buy(ticker, price, volume=quantity)
+                                logging.info(f"주문 성공(domestic_buy): {ticker} {order_type} {quantity}주 @ {price:,.2f}")
+                                return True
+                            elif hasattr(account, 'overseas_buy'):
+                                order_result = account.overseas_buy(ticker, price, volume=quantity)
+                                logging.info(f"주문 성공(overseas_buy): {ticker} {order_type} {quantity}주 @ {price:,.2f}")
+                                return True
+                    else:
+                        # 'account_product_sell' 메서드 사용 시도
+                        try:
+                            order_result = account.account_product_sell(
+                                ticker,
+                                price,
+                                volume=quantity
+                            )
+                            logging.info(f"주문 성공(account_product_sell): {ticker} {order_type} {quantity}주 @ {price:,.2f}")
+                            return True
+                        except Exception as acc_err:
+                            logging.warning(f"account_product_sell 호출 실패: {str(acc_err)}")
+                            
+                            # 다른 방식 시도
+                            if hasattr(account, 'domestic_sell'):
+                                order_result = account.domestic_sell(ticker, price, volume=quantity)
+                                logging.info(f"주문 성공(domestic_sell): {ticker} {order_type} {quantity}주 @ {price:,.2f}")
+                                return True
+                            elif hasattr(account, 'overseas_sell'):
+                                order_result = account.overseas_sell(ticker, price, volume=quantity)
+                                logging.info(f"주문 성공(overseas_sell): {ticker} {order_type} {quantity}주 @ {price:,.2f}")
+                                return True
+                except Exception as outer_acc_err:
+                    logging.error(f"계좌 객체 사용 주문 실패: {str(outer_acc_err)}")
+                
+                logging.error(f"{ticker} {order_type} 주문 실패: 모든 방법 시도 실패")
                 return False
         
         except Exception as outer_e:
             logging.error(f"{ticker} {order_type} 주문 초기화 중 오류: {str(outer_e)}")
+            import traceback
+            logging.error(f"주문 오류 상세: {traceback.format_exc()}")
             return False
 
     def get_daily_profit_loss(self):
