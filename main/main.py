@@ -1,10 +1,48 @@
-from pykis import PyKis
+import os
+import sys
 import logging
+import traceback
+from datetime import datetime, timedelta
+import json
 import time
-from datetime import datetime, timedelta, time as datetime_time
+
+# 경로 문제 해결
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+    sys.path.append(current_dir)
+    
+# 이제 상대 경로로 모듈 임포트 시도
+try:
+    from module.traders import Trader
+    from module.analysts import TBM_Strategy
+    from module.securities import load_secure_config
+except ModuleNotFoundError:
+    # 다른 경로 시도
+    try:
+        from main.module.traders import Trader
+        from main.module.analysts import TBM_Strategy
+        from main.module.securities import load_secure_config
+    except ModuleNotFoundError:
+        # 절대 경로로 시도
+        module_path = os.path.join(current_dir, 'module')
+        if os.path.exists(module_path):
+            sys.path.append(module_path)
+            try:
+                from traders import Trader
+                from analysts import TBM_Strategy
+                from securities import load_secure_config
+            except ImportError as e:
+                logging.error(f"모듈 임포트 실패: {str(e)}")
+                raise
+
+# PyKIS 라이브러리 임포트
+try:
+    from pykis import PyKis, KisAuth
+except ModuleNotFoundError:
+    logging.error("PyKis 라이브러리를 찾을 수 없습니다. pip install pykis 명령으로 설치해주세요.")
+    raise
 
 from module.analysts import *
-from module.traders import *
 from module.securities import load_secure_config
 
 # 로그 포맷 설정
@@ -210,46 +248,62 @@ def get_us_eastern_time():
     # 시, 분, 요일 반환
     return us_eastern.hour, us_eastern.minute, us_eastern.weekday(), is_dst
 
-def is_pre_market(trader):
-    """미국 장 시작 1시간 전인지 확인"""
+def is_pre_market(trader, now=None):
+    """미국 장 시작 1시간 전인지 확인하는 함수"""
+    if now is None:
+        now = datetime.now()
+    
     try:
-        # 1. 직접 미국 주식 기준 장 개장 시간 확인 (튜토리얼 방식대로)
-        hours = trader.kis.trading_hours("NASDAQ")  # 튜토리얼에 따라 "US" 대신 "NASDAQ" 사용
-        if hours:
-            logging.info(f"미국 장 개장 시간(KST): {hours.open_kst}, 종료 시간(KST): {hours.close_kst}")
-            return False  # 정상적으로 시간 확인됨
-        
+        # 방법 1: PyKis API 사용
+        try:
+            hours = trader.kis.trading_hours("US")
+            market_open_time = hours.open_kst
+            
+            today = datetime.now().date()
+            full_open_time = datetime.combine(today, market_open_time)
+            pre_market_time = full_open_time - timedelta(hours=1)
+            
+            # 현재 시간이 pre_market_time과 market_open_time 사이에 있는지 확인
+            current_time = datetime.combine(today, now.time())
+            return pre_market_time <= current_time < full_open_time
+        except Exception as api_error:
+            logging.warning(f"미국 장 시간 조회 실패: {str(api_error)}, 대체 방법 사용")
+            
+            # 방법 2: 서머타임 고려한 하드코딩된 시간 사용
+            # 현재 미국 동부 시간 확인
+            et_hour, et_minute, et_weekday, is_dst = get_us_eastern_time()
+            
+            # 미국 주식 시장은 월~금(0~4) 오전 9:30(동부시간)에 개장
+            is_trading_day = et_weekday < 5  # 월~금
+            
+            # 서머타임 여부에 따라 한국 시간으로 몇 시인지 계산
+            # 미국 동부 9:30(시장 개장)은 한국 시간으로 표준시 22:30, 서머타임 21:30
+            kr_market_open_hour = 22 if not is_dst else 21
+            kr_market_open_minute = 30
+            
+            # 현재 한국 시간
+            kr_now = datetime.now()
+            kr_hour, kr_minute = kr_now.hour, kr_now.minute
+            
+            # 시장 개장 1시간 전인지 확인
+            if not is_trading_day:
+                return False
+                
+            if kr_hour == kr_market_open_hour - 1:
+                # 시장 개장 1시간 전 같은 시간대
+                return kr_minute >= kr_market_open_minute
+            elif kr_hour == kr_market_open_hour:
+                # 시장 개장 시간대
+                return kr_minute < kr_market_open_minute
+                
+            return False
+            
     except Exception as e:
-        logging.warning(f"미국 장 시간 조회 실패: {str(e)}")
-        
-    # 2. 오류 발생 또는 데이터 없을 경우 하드코딩된 시간으로 대체 (안전망)
-    try:
-        # 미국 동부 시간 확인 (서머타임 적용)
-        import pytz
-        from datetime import datetime, time
-
-        # 현재 시간 (한국 시간)
-        now_kst = datetime.now(pytz.timezone('Asia/Seoul'))
-        
-        # 미국 동부 시간으로 변환
-        now_et = now_kst.astimezone(pytz.timezone('America/New_York'))
-        
-        # 미국 장 개장 시간 (ET 9:30 AM)
-        et_market_open = time(9, 30)
-        et_hour, et_minute = now_et.hour, now_et.minute
-        
-        # 장 시작 전 1시간인지 확인 (ET 8:30 ~ 9:30)
-        is_one_hour_before = (et_hour == 8 and et_minute >= 30) or (et_hour == 9 and et_minute < 30)
-        
-        # 주말인지 확인 (토요일=5, 일요일=6)
-        is_weekend = now_et.weekday() >= 5
-        
-        logging.info(f"현재 미국 동부 시간: {now_et.strftime('%H:%M')}, 주말여부: {is_weekend}")
-        return is_one_hour_before and not is_weekend
-        
-    except Exception as e:
-        logging.error(f"시간 확인 대체 로직에서 오류: {str(e)}")
-        return False  # 오류 시 False 반환하여 계속 진행
+        logging.error(f"장 시작 시간 확인 중 오류 발생: {str(e)}")
+        import traceback
+        logging.error(f"상세 오류: {traceback.format_exc()}")
+        # 오류 발생 시 안전하게 False 반환
+        return False
 
 def execute_trading_cycle(trader, is_pre_market_cycle=False):
     """매매 사이클을 실행하는 함수"""
