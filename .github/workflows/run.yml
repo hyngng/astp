@@ -163,4 +163,7 @@ jobs:
           echo "config.yaml 파일의 정보가 업데이트되었습니다."
 
       - name: Run Python Script
+        env:
+          PYTHONUNBUFFERED: 1
+          REQUESTS_TIMEOUT: 30  # API 요청 타임아웃 설정
         run: python main/main.py

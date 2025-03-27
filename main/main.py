@@ -28,19 +28,59 @@ def init_app():
     # 설정 로드
     config = load_config()
     
+    # 계좌번호 확인 및 수정
+    account_number = config["api_info"]["account"]
+    
+    # 계좌번호 형식 확인: 50124703-01 형식이어야 함
+    # 로그를 보니 API는 CANO: ['50124703'], ACNT_PRDT_CD: ['01'] 형식을 사용
+    # 하이픈이 없거나 잘못된 형식이면 수정
+    
+    # 하이픈 "-" 제거하고 다시 올바른 형식으로 설정
+    if "-" in account_number:
+        parts = account_number.split("-")
+        if len(parts) == 2:
+            main_acct = parts[0]
+            sub_acct = parts[1]
+            # 설정에는 하이픈 포함 형식으로 유지
+            config["api_info"]["account"] = f"{main_acct}-{sub_acct}"
+    else:
+        logging.warning(f"계좌번호 형식 확인: {account_number}")
+        if len(account_number) > 2:
+            main_acct = account_number[:-2]
+            sub_acct = account_number[-2:]
+            config["api_info"]["account"] = f"{main_acct}-{sub_acct}"
+            logging.info(f"계좌번호 형식 수정: {config['api_info']['account']}")
+    
+    # 최종 계좌번호 로깅
+    logging.info(f"사용할 계좌번호: {config['api_info']['account']}")
+    
     # KIS API 초기화
     try:
-        kis = PyKis(
-            id                = config["api_info"]["id"],
-            account           = config["api_info"]["account"],
-            appkey            = config["api_info"]["app_key"],
-            secretkey         = config["api_info"]["app_secret"],
-            virtual_id        = config["api_info"]["id"],
-            virtual_appkey    = config["api_info"]["virtual_app_key"],
-            virtual_secretkey = config["api_info"]["virtual_app_secret"],
-            keep_token        = True,
-        )
-        logging.info("KIS API가 성공적으로 초기화되었습니다.")
+        is_virtual = config["api_info"]["is_virtual"]
+        
+        if is_virtual:
+            # 모의투자 모드
+            kis = PyKis(
+                id=config["api_info"]["id"],
+                account=config["api_info"]["account"],  # 수정된 계좌번호 사용
+                appkey=config["api_info"]["app_key"],
+                secretkey=config["api_info"]["app_secret"],
+                virtual_id=config["api_info"]["id"],
+                virtual_appkey=config["api_info"]["virtual_app_key"],
+                virtual_secretkey=config["api_info"]["virtual_app_secret"],
+                keep_token=True,
+            )
+        else:
+            # 실제투자 모드
+            kis = PyKis(
+                id=config["api_info"]["id"],
+                account=config["api_info"]["account"],  # 수정된 계좌번호 사용
+                appkey=config["api_info"]["app_key"],
+                secretkey=config["api_info"]["app_secret"],
+                keep_token=True,
+            )
+            
+        logging.info(f"KIS API가 성공적으로 초기화되었습니다 (모드: {'모의투자' if is_virtual else '실제투자'})")
     except Exception as e:
         logging.error(f"KIS API 초기화 중 오류 발생: {str(e)}")
         raise
@@ -153,28 +193,30 @@ def get_us_eastern_time():
     # 시, 분, 요일 반환
     return us_eastern.hour, us_eastern.minute, us_eastern.weekday(), is_dst
 
-def is_pre_market(trader, now=None):
-    """미국 장 시작 1시간 전인지 확인하는 함수"""
-    if now is None:
-        now = datetime.now()
-    
+def is_pre_market(trader):
     try:
-        market_open_time = trader.kis.trading_hours("US").open_kst
+        # 미국 장 시작 시간 확인
+        market_hour_info = trader.kis.trading_hours("US")
+        # 이미 time 객체임 - 추가로 .time() 호출하지 않음
+        market_open_time = market_hour_info.open_kst
         
-        # datetime.time 객체에서 1시간을 빼는 연산 오류 수정
-        # 날짜와 시간을 포함한 전체 datetime 객체를 생성하고 연산
-        today = datetime.now().date()
-        full_open_time = datetime.combine(today, market_open_time.time())
-        pre_market_time = full_open_time - timedelta(hours=1)
+        # 현재 시간
+        now = datetime.now()
+        today = now.date()
         
-        # 현재 시간이 pre_market_time과 market_open_time 사이에 있는지 확인
-        current_time = datetime.combine(today, now.time())
-        return pre_market_time <= current_time < full_open_time
+        # 올바른 방법으로 combine 호출
+        full_open_time = datetime.combine(today, market_open_time)
+        
+        # 현재 시간이 장 시작 1시간 전인지 확인
+        time_diff = (full_open_time - now).total_seconds()
+        is_pre_market = 0 < time_diff <= 3600  # 1시간(3600초) 이내
+        
+        return is_pre_market
     except Exception as e:
         logging.error(f"장 시작 시간 확인 중 오류 발생: {str(e)}")
         import traceback
         logging.error(f"상세 오류: {traceback.format_exc()}")
-        return False
+        return False  # 오류 발생 시 안전하게 False 반환
 
 def execute_trading_cycle(trader, is_pre_market_cycle=False):
     """매매 사이클을 실행하는 함수"""
