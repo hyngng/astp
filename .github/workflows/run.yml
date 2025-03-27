@@ -2,27 +2,10 @@ name: ASTP Trading Bot
 
 on:
   schedule:
-    # 미국 장 개장 시간 (ET 9:30 AM)
-    - cron: '30 13 * * 1-5'  # UTC 13:30 (미국 서머타임-EDT 9:30, 한국 22:30)
-    - cron: '30 14 * * 1-5'  # UTC 14:30 (미국 비서머타임-EST 9:30, 한국 23:30)
-    
-    # 1시간 간격으로 실행 (서머타임 - 미국 동부 시간 기준)
-    - cron: '30 14 * * 1-5'  # UTC 14:30 (EDT 10:30, 한국 23:30)
-    - cron: '30 15 * * 1-5'  # UTC 15:30 (EDT 11:30, 한국 00:30)
-    - cron: '30 16 * * 1-5'  # UTC 16:30 (EDT 12:30, 한국 01:30)
-    - cron: '30 17 * * 1-5'  # UTC 17:30 (EDT 13:30, 한국 02:30)
-    - cron: '30 18 * * 1-5'  # UTC 18:30 (EDT 14:30, 한국 03:30)
-    - cron: '30 19 * * 1-5'  # UTC 19:30 (EDT 15:30, 한국 04:30)
-    
-    # 1시간 간격으로 실행 (비서머타임 - 미국 동부 시간 기준)
-    - cron: '30 15 * * 1-5'  # UTC 15:30 (EST 10:30, 한국 00:30)
-    - cron: '30 16 * * 1-5'  # UTC 16:30 (EST 11:30, 한국 01:30)
-    - cron: '30 17 * * 1-5'  # UTC 17:30 (EST 12:30, 한국 02:30)
-    - cron: '30 18 * * 1-5'  # UTC 18:30 (EST 13:30, 한국 03:30)
-    - cron: '30 19 * * 1-5'  # UTC 19:30 (EST 14:30, 한국 04:30)
-    - cron: '30 20 * * 1-5'  # UTC 20:30 (EST 15:30, 한국 05:30)
+    # 미국 장 거래 시간에 맞춰 실행 (13:30-20:30 UTC 사이 매 시간 30분에 실행)
+    - cron: '30 13-20 * * 1-5'  # UTC 13:30-20:30 (미국 장 시간 포함)
   
-  workflow_dispatch:  # 수동 실행 옵션 추가
+  workflow_dispatch:  # 수동 실행 옵션 유지
     inputs:
       is_virtual:
         description: '모의투자 활성화 여부'
@@ -60,26 +43,48 @@ jobs:
       - name: Check US Market Hours
         id: market-check
         run: |
-          # 현재 시간이 미국 시장 운영 시간인지 확인
+          # 현재 미국 동부 시간대 정보 확인
+          current_timezone=$(TZ="America/New_York" date +%Z)
           current_hour=$(TZ="America/New_York" date +%H)
           current_minute=$(TZ="America/New_York" date +%M)
-          current_day=$(TZ="America/New_York" date +%u)  # 미국 기준 요일 (1-7)
+          current_day=$(TZ="America/New_York" date +%u)
           
-          echo "현재 미국 동부 시간: ${current_hour}:${current_minute}, 요일: ${current_day}"
+          echo "현재 미국 동부 시간: ${current_hour}:${current_minute}, 시간대: ${current_timezone}, 요일: ${current_day}"
           
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             echo "수동 실행 모드: 시장 시간 체크를 건너뜁니다."
           else
-            # 주말(6,7) 또는 미국 시장 운영 시간이 아닐 경우 워크플로우 중단
+            # 주말(6,7) 체크
             if [ "$current_day" -ge 6 ]; then
               echo "미국 시간으로 주말입니다. 실행을 중단합니다."
               exit 1
             fi
             
-            # 미국 시장 시간이 아닌 경우 (9:30 AM - 4:00 PM 사이가 아닌 경우)
-            if ([ "$current_hour" -lt 9 ] || [ "$current_hour" -eq 9 -a "$current_minute" -lt 30 ] || [ "$current_hour" -ge 16 ]); then
-              echo "미국 시장 운영 시간이 아닙니다. 실행을 중단합니다."
-              exit 1
+            # 정확한 서머타임/비서머타임 처리
+            if [ "$current_timezone" == "EDT" ]; then
+              # 서머타임(EDT) 기간
+              if ([ "$current_hour" -lt 9 ] || [ "$current_hour" -eq 9 -a "$current_minute" -lt 30 ] || [ "$current_hour" -ge 16 ]); then
+                echo "EDT 기간: 미국 시장 운영 시간이 아닙니다. 실행을 중단합니다."
+                exit 1
+              fi
+              
+              # 1시간 단위로 실행되도록 분 단위 확인 (30분이 아닐 경우 중단)
+              if [ "$current_minute" -ne 30 ]; then
+                echo "실행 시간이 정확히 xx:30이 아닙니다. 중복 실행 방지를 위해 중단합니다."
+                exit 1
+              fi
+            else
+              # 비서머타임(EST) 기간
+              if ([ "$current_hour" -lt 9 ] || [ "$current_hour" -eq 9 -a "$current_minute" -lt 30 ] || [ "$current_hour" -ge 16 ]); then
+                echo "EST 기간: 미국 시장 운영 시간이 아닙니다. 실행을 중단합니다."
+                exit 1
+              fi
+              
+              # 1시간 단위로 실행되도록 분 단위 확인 (30분이 아닐 경우 중단)
+              if [ "$current_minute" -ne 30 ]; then
+                echo "실행 시간이 정확히 xx:30이 아닙니다. 중복 실행 방지를 위해 중단합니다."
+                exit 1
+              fi
             fi
           fi
 
