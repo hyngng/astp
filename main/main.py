@@ -1,3 +1,8 @@
+from module.traders import Trader
+from module.analysts import *
+from module.securities import load_secure_config
+from pykis import PyKis, KisAuth
+
 import os
 import sys
 import logging
@@ -10,40 +15,6 @@ import time
 current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
     sys.path.append(current_dir)
-    
-# 이제 상대 경로로 모듈 임포트 시도
-try:
-    from module.traders import Trader
-    from module.analysts import TBM_Strategy
-    from module.securities import load_secure_config
-except ModuleNotFoundError:
-    # 다른 경로 시도
-    try:
-        from main.module.traders import Trader
-        from main.module.analysts import TBM_Strategy
-        from main.module.securities import load_secure_config
-    except ModuleNotFoundError:
-        # 절대 경로로 시도
-        module_path = os.path.join(current_dir, 'module')
-        if os.path.exists(module_path):
-            sys.path.append(module_path)
-            try:
-                from traders import Trader
-                from analysts import TBM_Strategy
-                from securities import load_secure_config
-            except ImportError as e:
-                logging.error(f"모듈 임포트 실패: {str(e)}")
-                raise
-
-# PyKIS 라이브러리 임포트
-try:
-    from pykis import PyKis, KisAuth
-except ModuleNotFoundError:
-    logging.error("PyKis 라이브러리를 찾을 수 없습니다. pip install pykis 명령으로 설치해주세요.")
-    raise
-
-from module.analysts import *
-from module.securities import load_secure_config
 
 # 로그 포맷 설정
 logging.basicConfig(
@@ -168,7 +139,7 @@ def analyze_tickers(tickers, analyst):
     """주어진 종목들에 대해 MACD 분석을 수행하는 함수"""
     if not tickers:
         logging.warning("분석할 종목이 없습니다.")
-        return
+        return [], []
     
     # 신호 카운트 초기화
     golden_cross_count = 0
@@ -200,25 +171,21 @@ def analyze_tickers(tickers, analyst):
                 logging.error(f"{ticker}: {result['error']}")
         except Exception as e:
             error_count += 1
-            logging.error(f"{ticker} 분석 중 예외 발생: {str(e)}")
+            logging.error(f"{ticker} 분석 중 오류: {str(e)}")
     
     # 분석 결과 요약
-    logging.info(f"===== MACD 분석 결과 요약 =====")
-    logging.info(f"총 분석 종목: {len(tickers)}개")
+    logging.info(f"분석 완료: {len(tickers)}개 종목")
+    logging.info(f"골든크로스: {golden_cross_count}개 종목")
+    logging.info(f"데드크로스: {dead_cross_count}개 종목")
+    logging.info(f"신호없음: {no_signal_count}개 종목")
+    logging.info(f"오류: {error_count}개 종목")
     
-    if golden_cross_count > 0:
-        logging.info(f"골든크로스 발생: {golden_cross_count}개 기업 {golden_cross_tickers}")
+    if golden_cross_tickers:
+        logging.info(f"골든크로스 발생: {len(golden_cross_tickers)}개 기업 {golden_cross_tickers}")
+    if dead_cross_tickers:
+        logging.info(f"데드크로스 발생: {len(dead_cross_tickers)}개 기업 {dead_cross_tickers}")
     
-    if dead_cross_count > 0:
-        logging.info(f"데드크로스 발생: {dead_cross_count}개 기업 {dead_cross_tickers}")
-    
-    if no_signal_count > 0:
-        logging.info(f"신호 없음: {no_signal_count}개 기업")
-    
-    if error_count > 0:
-        logging.info(f"분석 오류: {error_count}개 기업")
-    
-    logging.info(f"===============================")
+    return golden_cross_tickers, dead_cross_tickers
 
 def get_us_eastern_time():
     """현재 미국 동부 시간(ET)을 계산합니다."""
@@ -305,16 +272,33 @@ def is_pre_market(trader, now=None):
         # 오류 발생 시 안전하게 False 반환
         return False
 
-def execute_trading_cycle(trader, is_pre_market_cycle=False):
+def execute_trading_cycle(trader, is_pre_market_cycle=False, golden_cross_tickers=None):
     """매매 사이클을 실행하는 함수"""
     try:
         cycle_type = "추가 (장 시작 전)" if is_pre_market_cycle else "정상"
         logging.info(f"{cycle_type} 매매 사이클 실행")
         
-        result = trader.auto_trading_cycle()
+        # 골든크로스 종목 정보가 있으면 Trader에게 설정
+        if golden_cross_tickers:
+            logging.info(f"매수 대상 골든크로스 종목 {len(golden_cross_tickers)}개 설정: {golden_cross_tickers}")
+            # 동적으로 속성 추가
+            trader.golden_cross_tickers = golden_cross_tickers
         
-        logging.info(f"{cycle_type} 매매 사이클 결과: 매도 {result['sell_count']}종목, 매수 {result['buy_count']}종목")
-        return result
+        result = trader.auto_trading_cycle(is_pre_market=is_pre_market_cycle)
+        
+        # 새로운 결과 형식에 맞게 로그 출력
+        sell_count = len(result.get('sell_orders', []))
+        buy_count = len(result.get('buy_orders', []))
+        
+        logging.info(f"{cycle_type} 매매 사이클 결과: 매도 {sell_count}종목, 매수 {buy_count}종목")
+        
+        # 기존 호환성을 위해 결과를 변환하여 반환
+        return {
+            'sell_count': sell_count,
+            'buy_count': buy_count,
+            'details': result,
+            'error': result.get('error', None)
+        }
     except Exception as e:
         logging.error(f"매매 사이클 실행 중 오류 발생: {str(e)}")
         import traceback
@@ -327,17 +311,17 @@ def main():
         # 어플리케이션 초기화
         config, kis, analyst, trader, tickers = init_app()
         
-        # 종목 분석
-        analyze_tickers(tickers, analyst)
+        # 종목 분석 - 골든크로스/데드크로스 찾기
+        golden_cross_tickers, dead_cross_tickers = analyze_tickers(tickers, analyst)
         
         logging.info("자동 매매 프로그램 시작 (일회성 실행)")
         
         # 미국 장 시작 1시간 전인지 확인
         if is_pre_market(trader):
-            execute_trading_cycle(trader, is_pre_market_cycle=True)
+            execute_trading_cycle(trader, is_pre_market_cycle=True, golden_cross_tickers=golden_cross_tickers)
         
         # 정상 매매 사이클 실행
-        execute_trading_cycle(trader)
+        execute_trading_cycle(trader, golden_cross_tickers=golden_cross_tickers)
         
         logging.info("자동 매매 프로그램 종료 (일회성 실행 완료)")
             
