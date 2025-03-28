@@ -1,0 +1,34 @@
+# API key, secret은 GitHub Secret에서 관리함
+api_info:
+    id: "@1983041"
+    account: "50124703-01"
+    app_key: PSouhpxHjVs8VsmzkqysSshkD7bLVSHCp1ju
+    app_secret: wwYb7dVDbJhr32GtxNkMRyuPQ3eWVuNODHQy8Tu6oAjxfeG0nVbhC55TgIrGjVBjWDBOQ51zCLDiTJ9PTbRM1H/dIrpAkc4mwQlnJ02s9Yy7YrEEluCiZcuUNmU4x98w24Y1/rjqWAUsmdq+EMGEjq+ARY2F1j1ajj4xUofQ87qSlsDgwg4=
+    virtual_app_key: PShOoY374Vmisb5NLcDTSGgwfTeWC6ub1XWp
+    virtual_app_secret: LXgZDpbVVWdeTBFxjIW1795ueFMDZFUhPce7EP8r63bTiAkAf/n4M1SSvUWAY7ReS3Wilm4h6gy8tCpStF45gSLIsX3Fgv50abKgLVOoMHz9fc35XQ2EA+VGG4MrbBofNwRPs3eVeJP0pOIqy0l3EBJnHCamQhLy6C8+woF10nnh48kBrTg=
+    is_virtual: true   # 모의투자 모드 활성화 여부 (true: 가상잔고 사용, false: 실제잔고 사용)
+
+companies_settings:
+    auto_fetch: true     # 자동으로 나스닥 100 기업 가져오기 여부
+    manual_tickers: []   # 수동으로 추가할 티커 목록 (auto_fetch가 false일 때 사용)
+
+system:
+    operating_cycle: 3600  # 1시간
+
+macd_settings:
+    period: "60d"        # 데이터 조회 기간
+    interval: "1h"       # 데이터 조회 간격
+    ema_short: 12        # 단기 지수이동평균 기간
+    ema_long: 26         # 장기 지수이동평균 기간
+    signal_period: 9     # 시그널 라인 계산 기간
+
+# 새로 추가한 자동 매매 설정
+trading_settings:
+    auto_trading_enabled: true   # 자동 매매 활성화 여부 (기본값: 비활성화)
+    stop_loss_threshold: -7.0    # 손절 기준 손실률 (%)
+    take_profit_threshold: 20.0  # 익절 기준 수익률 (%)
+    max_holding_days: 30         # 최대 보유 기간 (일)
+    max_buy_stocks: 3            # 한 번에 최대로 매수할 종목 수
+    budget_percentage: 30        # 사용 가능 자금 중 한 번에 사용할 비율 (%)
+    risk_level: 2                # TBM 전략의 위험 수준 (1-보수적, 2-중간, 3-공격적)
+    virtual_balance: 100000000   # 모의투자 모드에서 사용할 가상 잔고 (원)

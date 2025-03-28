@@ -1,9 +1,6 @@
-tzdata
-typing_extensions
 python-kis
+pandas
+logger
 yfinance
-pandas>=1.3.5
-numpy>=1.21.6
-matplotlib>=3.5.3
-pyyaml>=6.0
-pytz>=2022.1
+pyyaml
+lxml
