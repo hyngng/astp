@@ -1,4 +1,4 @@
-name: Running
+name: Auto Trading Bot
 
 on:
   # 수동 실행 트리거 추가
@@ -8,34 +8,26 @@ on:
     # 미국 장 개장 시간 (ET 9:30 AM)
     - cron: '30 13 * * 1-5'  # UTC 13:30 (미국 서머타임-EDT 9:30, 한국 22:30)
     - cron: '30 14 * * 1-5'  # UTC 14:30 (미국 비서머타임-EST 9:30, 한국 23:30)
-    
     # 1시간 간격으로 실행 (서머타임 - 미국 동부 시간 기준)
-    - cron: '30 14 * * 1-5'  # UTC 14:30 (EDT 10:30, 한국 23:30)
     - cron: '30 15 * * 1-5'  # UTC 15:30 (EDT 11:30, 한국 00:30)
     - cron: '30 16 * * 1-5'  # UTC 16:30 (EDT 12:30, 한국 01:30)
     - cron: '30 17 * * 1-5'  # UTC 17:30 (EDT 13:30, 한국 02:30)
     - cron: '30 18 * * 1-5'  # UTC 18:30 (EDT 14:30, 한국 03:30)
     - cron: '30 19 * * 1-5'  # UTC 19:30 (EDT 15:30, 한국 04:30)
-    
-    # 1시간 간격으로 실행 (비서머타임 - 미국 동부 시간 기준)
-    - cron: '30 15 * * 1-5'  # UTC 15:30 (EST 10:30, 한국 00:30)
-    - cron: '30 16 * * 1-5'  # UTC 16:30 (EST 11:30, 한국 01:30)
-    - cron: '30 17 * * 1-5'  # UTC 17:30 (EST 12:30, 한국 02:30)
-    - cron: '30 18 * * 1-5'  # UTC 18:30 (EST 13:30, 한국 03:30)
-    - cron: '30 19 * * 1-5'  # UTC 19:30 (EST 14:30, 한국 04:30)
-    - cron: '30 20 * * 1-5'  # UTC 20:30 (EST 15:30, 한국 05:30)
+    - cron: '30 20 * * 1-5'  # UTC 20:30 (EDT 16:30, 한국 05:30)
 
 jobs:
   auto-trading:
     runs-on: ubuntu-latest
     env:
       PYTHONPATH: ${{ github.workspace }}
-      ACCOUNT_ID: ${{ secrets.ACCOUNT_ID }}
-      ACCOUNT_NUMBER: ${{ secrets.ACCOUNT_NUMBER }}
-      ACTUAL_APP_KEY: ${{ secrets.ACTUAL_APP_KEY }}
-      ACTUAL_APP_SECRET: ${{ secrets.ACTUAL_APP_SECRET }}
-      VIRTUAL_APP_KEY: ${{ secrets.VIRTUAL_APP_KEY }}
-      VIRTUAL_APP_SECRET: ${{ secrets.VIRTUAL_APP_SECRET }}
+      # PyKis 라이브러리가 직접 사용하는 환경 변수명으로 설정
+      KIS_ID: ${{ secrets.ACCOUNT_ID }}
+      KIS_ACCOUNT: ${{ secrets.ACCOUNT_NUMBER }}
+      KIS_APP_KEY: ${{ secrets.ACTUAL_APP_KEY }}
+      KIS_APP_SECRET: ${{ secrets.ACTUAL_APP_SECRET }}
+      KIS_VIRTUAL_APP_KEY: ${{ secrets.VIRTUAL_APP_KEY }}
+      KIS_VIRTUAL_APP_SECRET: ${{ secrets.VIRTUAL_APP_SECRET }}
 
     steps:
     - uses: actions/checkout@v3
@@ -50,86 +42,17 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         
-    - name: Update config.yaml
+    - name: Debug Environment Variables
       run: |
-        # 디버깅: 환경변수 확인 (중요 정보는 마스킹)
-        echo "ACCOUNT_ID 설정됨: $([[ -n "$ACCOUNT_ID" ]] && echo "예" || echo "아니오")"
-        echo "ACCOUNT_NUMBER 설정됨: $([[ -n "$ACCOUNT_NUMBER" ]] && echo "예" || echo "아니오")"
+        # 환경 변수가 설정되었는지 확인 (민감 정보는 마스킹)
+        echo "KIS_ID 설정됨: $([[ -n "$KIS_ID" ]] && echo "예" || echo "아니오")"
+        echo "KIS_ACCOUNT 설정됨: $([[ -n "$KIS_ACCOUNT" ]] && echo "예" || echo "아니오")"
+        echo "KIS_APP_KEY 설정됨: $([[ -n "$KIS_APP_KEY" ]] && echo "예" || echo "아니오")"
+        echo "KIS_APP_SECRET 설정됨: $([[ -n "$KIS_APP_SECRET" ]] && echo "예" || echo "아니오")"
         
-        # Python 스크립트로 config.yaml 파일 업데이트
-        python - <<EOF
-        import os
-        import yaml
-        import logging
-        
-        # 로깅 설정
-        logging.basicConfig(level=logging.INFO)
-        
-        try:
-            # 환경 변수 가져오기
-            env_vars = {
-                'id': os.environ.get('ACCOUNT_ID', ''),
-                'account': os.environ.get('ACCOUNT_NUMBER', ''),
-                'app_key': os.environ.get('ACTUAL_APP_KEY', ''),
-                'app_secret': os.environ.get('ACTUAL_APP_SECRET', ''),
-                'virtual_app_key': os.environ.get('VIRTUAL_APP_KEY', ''),
-                'virtual_app_secret': os.environ.get('VIRTUAL_APP_SECRET', ''),
-                'is_virtual': False  # 기본값 설정
-            }
-            
-            # config.yaml 파일 경로
-            config_file = 'data/config.yaml'
-            
-            # 파일 존재 확인
-            if not os.path.exists(config_file):
-                # config.yaml 파일이 없으므로 새로 만들기
-                config_data = env_vars
-                config_data['trading_settings'] = {
-                    'max_buy_stocks': 3,
-                    'stop_loss_threshold': -7.0,
-                    'take_profit_threshold': 20.0,
-                    'max_holding_days': 30
-                }
-            else:
-                # 기존 파일 읽기
-                with open(config_file, 'r') as f:
-                    config_data = yaml.safe_load(f) or {}
-                
-                # 키가 있으면 대체, 없으면 추가
-                for key, value in env_vars.items():
-                    if value:  # 값이 있는 경우에만 업데이트
-                        config_data[key] = value
-            
-            # 파일 저장
-            with open(config_file, 'w') as f:
-                yaml.dump(config_data, f, default_flow_style=False)
-            
-            # 디버깅: 업데이트된 파일 내용 확인 (중요 정보 마스킹)
-            logging.info("config.yaml 업데이트 완료")
-            masked_config = config_data.copy()
-            for key in ['app_key', 'app_secret', 'virtual_app_key', 'virtual_app_secret']:
-                if key in masked_config and masked_config[key]:
-                    masked_config[key] = "***마스킹됨***"
-            
-            # 중요: ID와 계정 번호가 설정되었는지 확인
-            if not masked_config.get('id'):
-                logging.error("주의: ID가 설정되지 않았습니다!")
-            if not masked_config.get('account'):
-                logging.error("주의: 계정 번호가 설정되지 않았습니다!")
-                
-            logging.info(f"업데이트된 설정 파일 내용: {masked_config}")
-            
-        except Exception as e:
-            logging.error(f"설정 파일 업데이트 중 오류 발생: {str(e)}")
-            exit(1)
-        EOF
-        
-        # config.yaml 파일 내용 확인
-        echo "config.yaml 파일 존재 확인:"
-        ls -la data/
-        
-    - name: Run ASTP
+    - name: Run Auto Trading Bot
       run: |
+        # 직접 환경 변수를 사용하여 실행
         python main/main.py
       env:
         TZ: Asia/Seoul  # 한국 시간대 설정 
