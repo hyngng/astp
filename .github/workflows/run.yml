@@ -50,21 +50,21 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         
-    - name: Update config_temp.yaml
+    - name: Update config.yaml
       run: |
-        # data 폴더의 config_temp.yaml 파일 경로
-        config_file="data/config_temp.yaml"
+        # data 폴더의 config.yaml 파일 경로
+        config_file="data/config.yaml"
         
         # 파일 존재 확인
         if [ ! -f "$config_file" ]; then
-          echo "data/config_temp.yaml 파일을 찾을 수 없습니다."
+          echo "data/config.yaml 파일을 찾을 수 없습니다."
           exit 1
         fi
         
         # 임시 파일 생성
         temp_file="data/temp_config.yaml"
         
-        # config_temp.yaml의 내용을 읽어서 필요한 부분만 수정
+        # config.yaml의 내용을 읽어서 필요한 부분만 수정
         awk -v account_id="$ACCOUNT_ID" \
             -v account_number="$ACCOUNT_NUMBER" \
             -v actual_app_key="$ACTUAL_APP_KEY" \
