@@ -87,22 +87,4 @@ jobs:
       run: |
         python main/main.py
       env:
-        TZ: Asia/Seoul  # 한국 시간대 설정
-        
-    - name: Send notification on failure
-      if: failure()
-      uses: actions/github-script@v6
-      with:
-        script: |
-          const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
-          const message = {
-            content: `❌ 자동 매매 봇 실행 실패\n실행 시간: ${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}`
-          };
-          
-          await fetch(webhookUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(message),
-          }); 
+        TZ: Asia/Seoul  # 한국 시간대 설정 
