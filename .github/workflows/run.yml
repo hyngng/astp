@@ -52,42 +52,81 @@ jobs:
         
     - name: Update config.yaml
       run: |
-        # data 폴더의 config.yaml 파일 경로
-        config_file="data/config.yaml"
+        # 디버깅: 환경변수 확인 (중요 정보는 마스킹)
+        echo "ACCOUNT_ID 설정됨: $([[ -n "$ACCOUNT_ID" ]] && echo "예" || echo "아니오")"
+        echo "ACCOUNT_NUMBER 설정됨: $([[ -n "$ACCOUNT_NUMBER" ]] && echo "예" || echo "아니오")"
         
-        # 파일 존재 확인
-        if [ ! -f "$config_file" ]; then
-          echo "data/config.yaml 파일을 찾을 수 없습니다."
-          exit 1
-        fi
+        # Python 스크립트로 config.yaml 파일 업데이트
+        python - <<EOF
+        import os
+        import yaml
+        import logging
         
-        # 임시 파일 생성
-        temp_file="data/temp_config.yaml"
+        # 로깅 설정
+        logging.basicConfig(level=logging.INFO)
         
-        # config.yaml의 내용을 읽어서 필요한 부분만 수정
-        awk -v account_id="$ACCOUNT_ID" \
-            -v account_number="$ACCOUNT_NUMBER" \
-            -v actual_app_key="$ACTUAL_APP_KEY" \
-            -v actual_app_secret="$ACTUAL_APP_SECRET" \
-            -v virtual_app_key="$VIRTUAL_APP_KEY" \
-            -v virtual_app_secret="$VIRTUAL_APP_SECRET" \
-            -v is_virtual="false" \
-            '
-            /^id:/ { print "id: " account_id; next }
-            /^account:/ { print "account: " account_number; next }
-            /^app_key:/ { print "app_key: " actual_app_key; next }
-            /^app_secret:/ { print "app_secret: " actual_app_secret; next }
-            /^virtual_app_key:/ { print "virtual_app_key: " virtual_app_key; next }
-            /^virtual_app_secret:/ { print "virtual_app_secret: " virtual_app_secret; next }
-            /^is_virtual:/ { print "is_virtual: " is_virtual; next }
-            { print }
-            ' "$config_file" > "$temp_file"
+        try:
+            # 환경 변수 가져오기
+            env_vars = {
+                'id': os.environ.get('ACCOUNT_ID', ''),
+                'account': os.environ.get('ACCOUNT_NUMBER', ''),
+                'app_key': os.environ.get('ACTUAL_APP_KEY', ''),
+                'app_secret': os.environ.get('ACTUAL_APP_SECRET', ''),
+                'virtual_app_key': os.environ.get('VIRTUAL_APP_KEY', ''),
+                'virtual_app_secret': os.environ.get('VIRTUAL_APP_SECRET', ''),
+                'is_virtual': False  # 기본값 설정
+            }
+            
+            # config.yaml 파일 경로
+            config_file = 'data/config.yaml'
+            
+            # 파일 존재 확인
+            if not os.path.exists(config_file):
+                # config.yaml 파일이 없으므로 새로 만들기
+                config_data = env_vars
+                config_data['trading_settings'] = {
+                    'max_buy_stocks': 3,
+                    'stop_loss_threshold': -7.0,
+                    'take_profit_threshold': 20.0,
+                    'max_holding_days': 30
+                }
+            else:
+                # 기존 파일 읽기
+                with open(config_file, 'r') as f:
+                    config_data = yaml.safe_load(f) or {}
+                
+                # 키가 있으면 대체, 없으면 추가
+                for key, value in env_vars.items():
+                    if value:  # 값이 있는 경우에만 업데이트
+                        config_data[key] = value
+            
+            # 파일 저장
+            with open(config_file, 'w') as f:
+                yaml.dump(config_data, f, default_flow_style=False)
+            
+            # 디버깅: 업데이트된 파일 내용 확인 (중요 정보 마스킹)
+            logging.info("config.yaml 업데이트 완료")
+            masked_config = config_data.copy()
+            for key in ['app_key', 'app_secret', 'virtual_app_key', 'virtual_app_secret']:
+                if key in masked_config and masked_config[key]:
+                    masked_config[key] = "***마스킹됨***"
+            
+            # 중요: ID와 계정 번호가 설정되었는지 확인
+            if not masked_config.get('id'):
+                logging.error("주의: ID가 설정되지 않았습니다!")
+            if not masked_config.get('account'):
+                logging.error("주의: 계정 번호가 설정되지 않았습니다!")
+                
+            logging.info(f"업데이트된 설정 파일 내용: {masked_config}")
+            
+        except Exception as e:
+            logging.error(f"설정 파일 업데이트 중 오류 발생: {str(e)}")
+            exit(1)
+        EOF
         
-        # 임시 파일을 원본 파일로 이동
-        mv "$temp_file" "$config_file"
-        
-        # 변경된 config.yaml 사용 준비 완료
-        echo "data/config.yaml 파일 업데이트 완료"
+        # config.yaml 파일 내용 확인
+        echo "config.yaml 파일 존재 확인:"
+        ls -la data/
         
     - name: Run ASTP
       run: |
