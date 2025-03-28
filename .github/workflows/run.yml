@@ -1,4 +1,4 @@
-name: Auto Trading Bot
+name: Running
 
 on:
   # 수동 실행 트리거 추가
@@ -21,13 +21,12 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PYTHONPATH: ${{ github.workspace }}
-      # PyKis 라이브러리가 직접 사용하는 환경 변수명으로 설정
-      KIS_ID: ${{ secrets.ACCOUNT_ID }}
-      KIS_ACCOUNT: ${{ secrets.ACCOUNT_NUMBER }}
-      KIS_APP_KEY: ${{ secrets.ACTUAL_APP_KEY }}
-      KIS_APP_SECRET: ${{ secrets.ACTUAL_APP_SECRET }}
-      KIS_VIRTUAL_APP_KEY: ${{ secrets.VIRTUAL_APP_KEY }}
-      KIS_VIRTUAL_APP_SECRET: ${{ secrets.VIRTUAL_APP_SECRET }}
+      ACCOUNT_ID: ${{ secrets.ACCOUNT_ID }}
+      ACCOUNT_NUMBER: ${{ secrets.ACCOUNT_NUMBER }}
+      ACTUAL_APP_KEY: ${{ secrets.ACTUAL_APP_KEY }}
+      ACTUAL_APP_SECRET: ${{ secrets.ACTUAL_APP_SECRET }}
+      VIRTUAL_APP_KEY: ${{ secrets.VIRTUAL_APP_KEY }}
+      VIRTUAL_APP_SECRET: ${{ secrets.VIRTUAL_APP_SECRET }}
 
     steps:
     - uses: actions/checkout@v3
@@ -42,17 +41,23 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         
-    - name: Debug Environment Variables
+    - name: Update config.yaml
       run: |
-        # 환경 변수가 설정되었는지 확인 (민감 정보는 마스킹)
-        echo "KIS_ID 설정됨: $([[ -n "$KIS_ID" ]] && echo "예" || echo "아니오")"
-        echo "KIS_ACCOUNT 설정됨: $([[ -n "$KIS_ACCOUNT" ]] && echo "예" || echo "아니오")"
-        echo "KIS_APP_KEY 설정됨: $([[ -n "$KIS_APP_KEY" ]] && echo "예" || echo "아니오")"
-        echo "KIS_APP_SECRET 설정됨: $([[ -n "$KIS_APP_SECRET" ]] && echo "예" || echo "아니오")"
+        # config.yaml 파일 경로
+        CONFIG_FILE="data/config.yaml"
         
-    - name: Run Auto Trading Bot
+        # 간단하게 sed 명령으로 필요한 부분만 대체
+        sed -i "s/^id:.*$/id: $ACCOUNT_ID/" $CONFIG_FILE
+        sed -i "s/^account:.*$/account: $ACCOUNT_NUMBER/" $CONFIG_FILE
+        sed -i "s/^app_key:.*$/app_key: $ACTUAL_APP_KEY/" $CONFIG_FILE
+        sed -i "s/^app_secret:.*$/app_secret: $ACTUAL_APP_SECRET/" $CONFIG_FILE
+        sed -i "s/^virtual_app_key:.*$/virtual_app_key: $VIRTUAL_APP_KEY/" $CONFIG_FILE
+        sed -i "s/^virtual_app_secret:.*$/virtual_app_secret: $VIRTUAL_APP_SECRET/" $CONFIG_FILE
+        
+        echo "config.yaml 파일 업데이트 완료"
+        
+    - name: Run ASTP
       run: |
-        # 직접 환경 변수를 사용하여 실행
         python main/main.py
       env:
         TZ: Asia/Seoul  # 한국 시간대 설정 
