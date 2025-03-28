@@ -8,12 +8,10 @@ api_info:
     virtual_app_secret: eveML2B57KexvanXRLnihgUHIfb2uWOnD4NwHn/mVzDOmVkdP/DaHJhAEWrEo5LRoynyStVGvIqsDO9n1V03WtVPkjsiZG9k2NJXEfgMv+6iRSyL/OnogozCOT+CJOoPGF6goOEspoZUOrTS7pR/ZZ/+zT+77+IIk769aB4ad8KJE5bDl4s=
     is_virtual: true   # 모의투자 모드 활성화 여부 (true: 가상잔고 사용, false: 실제잔고 사용)
 
+# 밑의 옵션들은 쓸모있는지좀 보자
 companies_settings:
     auto_fetch: true     # 자동으로 나스닥 100 기업 가져오기 여부
     manual_tickers: []   # 수동으로 추가할 티커 목록 (auto_fetch가 false일 때 사용)
-
-system:
-    operating_cycle: 3600  # 1시간
 
 macd_settings:
     period: "60d"        # 데이터 조회 기간

@@ -30,17 +30,12 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PYTHONPATH: ${{ github.workspace }}
-      KIS_APP_KEY: ${{ secrets.KIS_APP_KEY }}
-      KIS_APP_SECRET: ${{ secrets.KIS_APP_SECRET }}
-      KIS_ACCOUNT_NUMBER: ${{ secrets.KIS_ACCOUNT_NUMBER }}
-      KIS_ACCOUNT_CODE: ${{ secrets.KIS_ACCOUNT_CODE }}
-      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-      MAX_BUY_STOCKS: 3
-      STOP_LOSS_THRESHOLD: -7.0
-      TAKE_PROFIT_THRESHOLD: 20.0
-      MAX_HOLDING_DAYS: 30
-      RETRY_COUNT: 3
-      RETRY_DELAY: 5
+      ACCOUNT_ID: ${{ secrets.ACCOUNT_ID }}
+      ACCOUNT_NUMBER: ${{ secrets.ACCOUNT_NUMBER }}
+      ACTUAL_APP_KEY: ${{ secrets.ACTUAL_APP_KEY }}
+      ACTUAL_APP_SECRET: ${{ secrets.ACTUAL_APP_SECRET }}
+      VIRTUAL_APP_KEY: ${{ secrets.VIRTUAL_APP_KEY }}
+      VIRTUAL_APP_SECRET: ${{ secrets.VIRTUAL_APP_SECRET }}
 
     steps:
     - uses: actions/checkout@v3
@@ -54,6 +49,39 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
+        
+    - name: Update config.yaml
+      run: |
+        # config.yaml 파일 읽기
+        config_file="config.yaml"
+        if [ -f "$config_file" ]; then
+          # 임시 파일 생성
+          temp_file="temp_config.yaml"
+          
+          # config.yaml의 내용을 읽어서 필요한 부분만 수정
+          awk -v account_id="$ACCOUNT_ID" \
+              -v account_number="$ACCOUNT_NUMBER" \
+              -v actual_app_key="$ACTUAL_APP_KEY" \
+              -v actual_app_secret="$ACTUAL_APP_SECRET" \
+              -v virtual_app_key="$VIRTUAL_APP_KEY" \
+              -v virtual_app_secret="$VIRTUAL_APP_SECRET" \
+              '
+              /^id:/ { print "id: " account_id; next }
+              /^account:/ { print "account: " account_number; next }
+              /^app_key:/ { print "app_key: " actual_app_key; next }
+              /^app_secret:/ { print "app_secret: " actual_app_secret; next }
+              /^virtual_app_key:/ { print "virtual_app_key: " virtual_app_key; next }
+              /^virtual_app_secret:/ { print "virtual_app_secret: " virtual_app_secret; next }
+              /^is_virtual:/ { print "is_virtual: " is_virtual; next }
+              { print }
+              ' "$config_file" > "$temp_file"
+          
+          # 임시 파일을 원본 파일로 이동
+          mv "$temp_file" "$config_file"
+        else
+          echo "config.yaml 파일을 찾을 수 없습니다."
+          exit 1
+        fi
         
     - name: Run auto trading bot
       run: |
