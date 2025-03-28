@@ -1,0 +1,77 @@
+name: Auto Stock Trading Program
+
+on:
+  schedule:
+    # 미국 장 개장 시간 (ET 9:30 AM)
+    - cron: '30 13 * * 1-5'  # UTC 13:30 (미국 서머타임-EDT 9:30, 한국 22:30)
+    - cron: '30 14 * * 1-5'  # UTC 14:30 (미국 비서머타임-EST 9:30, 한국 23:30)
+    
+    # 1시간 간격으로 실행 (서머타임 - 미국 동부 시간 기준)
+    - cron: '30 14 * * 1-5'  # UTC 14:30 (EDT 10:30, 한국 23:30)
+    - cron: '30 15 * * 1-5'  # UTC 15:30 (EDT 11:30, 한국 00:30)
+    - cron: '30 16 * * 1-5'  # UTC 16:30 (EDT 12:30, 한국 01:30)
+    - cron: '30 17 * * 1-5'  # UTC 17:30 (EDT 13:30, 한국 02:30)
+    - cron: '30 18 * * 1-5'  # UTC 18:30 (EDT 14:30, 한국 03:30)
+    - cron: '30 19 * * 1-5'  # UTC 19:30 (EDT 15:30, 한국 04:30)
+    
+    # 1시간 간격으로 실행 (비서머타임 - 미국 동부 시간 기준)
+    - cron: '30 15 * * 1-5'  # UTC 15:30 (EST 10:30, 한국 00:30)
+    - cron: '30 16 * * 1-5'  # UTC 16:30 (EST 11:30, 한국 01:30)
+    - cron: '30 17 * * 1-5'  # UTC 17:30 (EST 12:30, 한국 02:30)
+    - cron: '30 18 * * 1-5'  # UTC 18:30 (EST 13:30, 한국 03:30)
+    - cron: '30 19 * * 1-5'  # UTC 19:30 (EST 14:30, 한국 04:30)
+    - cron: '30 20 * * 1-5'  # UTC 20:30 (EST 15:30, 한국 05:30)
+
+jobs:
+  auto-trading:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      KIS_APP_KEY: ${{ secrets.KIS_APP_KEY }}
+      KIS_APP_SECRET: ${{ secrets.KIS_APP_SECRET }}
+      KIS_ACCOUNT_NUMBER: ${{ secrets.KIS_ACCOUNT_NUMBER }}
+      KIS_ACCOUNT_CODE: ${{ secrets.KIS_ACCOUNT_CODE }}
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+      MAX_BUY_STOCKS: 3
+      STOP_LOSS_THRESHOLD: -7.0
+      TAKE_PROFIT_THRESHOLD: 20.0
+      MAX_HOLDING_DAYS: 30
+      RETRY_COUNT: 3
+      RETRY_DELAY: 5
+
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Run 
+      run: |
+        python main/main.py
+      env:
+        TZ: Asia/Seoul  # 한국 시간대 설정
+        
+    - name: Send notification on failure
+      if: failure()
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+          const message = {
+            content: `❌ 자동 매매 봇 실행 실패\n실행 시간: ${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}`
+          };
+          
+          await fetch(webhookUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(message),
+          }); 

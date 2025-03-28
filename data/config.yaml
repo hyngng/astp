@@ -2,10 +2,10 @@
 api_info:
     id: "@1983041"
     account: "50124703-01"
-    app_key: PSouhpxHjVs8VsmzkqysSshkD7bLVSHCp1ju
-    app_secret: wwYb7dVDbJhr32GtxNkMRyuPQ3eWVuNODHQy8Tu6oAjxfeG0nVbhC55TgIrGjVBjWDBOQ51zCLDiTJ9PTbRM1H/dIrpAkc4mwQlnJ02s9Yy7YrEEluCiZcuUNmU4x98w24Y1/rjqWAUsmdq+EMGEjq+ARY2F1j1ajj4xUofQ87qSlsDgwg4=
-    virtual_app_key: PShOoY374Vmisb5NLcDTSGgwfTeWC6ub1XWp
-    virtual_app_secret: LXgZDpbVVWdeTBFxjIW1795ueFMDZFUhPce7EP8r63bTiAkAf/n4M1SSvUWAY7ReS3Wilm4h6gy8tCpStF45gSLIsX3Fgv50abKgLVOoMHz9fc35XQ2EA+VGG4MrbBofNwRPs3eVeJP0pOIqy0l3EBJnHCamQhLy6C8+woF10nnh48kBrTg=
+    app_key: PSf0RZCQPbvYUBEoSheh35g3Xw17P4LElB0g
+    app_secret: c6O7McqmYjiMO0TzJRZthUWpOBc7i2MJpnpeBCI93GwAcQZ0yBiYRWmxJQztiZZLPenlGE5lsUwPXuVIrw1csj15++v/IU5reC3TnfvqPzDw7BIYHOqinbmGi/3s+3/XgVWhH25MGgLovIOrYagbQkp0Bo8j4wecUrPUxXIesQpT3wZuer4=
+    virtual_app_key: PS9xvU7fw6zIGDZKvI4blJyfx5WlqCQhwApd
+    virtual_app_secret: eveML2B57KexvanXRLnihgUHIfb2uWOnD4NwHn/mVzDOmVkdP/DaHJhAEWrEo5LRoynyStVGvIqsDO9n1V03WtVPkjsiZG9k2NJXEfgMv+6iRSyL/OnogozCOT+CJOoPGF6goOEspoZUOrTS7pR/ZZ/+zT+77+IIk769aB4ad8KJE5bDl4s=
     is_virtual: true   # 모의투자 모드 활성화 여부 (true: 가상잔고 사용, false: 실제잔고 사용)
 
 companies_settings:

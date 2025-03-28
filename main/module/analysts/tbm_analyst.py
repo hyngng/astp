@@ -1,5 +1,9 @@
+from pykis import KisBalance
+from datetime import datetime
 import yfinance
 import logging
+import traceback
+import time
 
 from ..analyst import Analyst
 
@@ -192,8 +196,10 @@ class TBM_Analyst(Analyst):
         # 결과 정렬 (점수 기준)
         buy_candidates.sort(key=lambda x: x['score'], reverse=True)
         
-        # 상위 매수 후보 선정 (상위 5개)
-        top_buy_candidates = buy_candidates[:5] if len(buy_candidates) >= 5 else buy_candidates
+        # 상위 매수 후보 선정 (상위 3개)
+        top_buy_candidates = buy_candidates[:3] if len(buy_candidates) >= 3 else buy_candidates
+
+        logging.info(f"매수 대상 종목: {len(top_buy_candidates)}개")
         
         return {
             'buy': top_buy_candidates,
@@ -244,15 +250,196 @@ class TBM_Analyst(Analyst):
                 
         return entry_price * (1 + reward_percentage)
 
-    def generate_recommendations(self, tickers):
-        '''TBM 전략을 기반으로 추천 종목을 생성합니다.
+    def get_quote(self, ticker: str):
+        '''종목 시세 정보를 가져오는 함수
+        '''
+        time.sleep(1)
+        try:
+            return self.kis.stock(ticker).quote()
+        except Exception as e:
+            logging.error(f"시세 정보 가져오기 실패 ({ticker}): {str(e)}")
+            raise
+
+    def get_recommendations_to_buy(self, tickers):
+        '''TBM 전략을 기반으로 추천 종목을 생성하고 처리합니다.
+        
+        Args:
+            tickers (List[str]): 분석할 종목 티커 리스트
+            
+        Returns:
+            List[dict]: 처리된 매수 추천 종목 리스트 (티커, 가격, 종목명 포함)
+        '''
+        try:
+            # 기본 종목 리스트 설정
+            if not tickers:
+                tickers = self.get_default_tickers()
+            
+            # 전략 실행
+            result = self.run_strategy(tickers)
+            recommendations = [item['ticker'] for item in result['buy']]
+            
+            # 매수 추천 종목이 없는 경우
+            if not recommendations:
+                logging.info("매수 추천 종목이 없습니다.")
+                return []
+            
+            # 주문 가능한 형태로 가공
+            processed_targets = []
+            for target in recommendations:
+                try:
+                    # 시세 조회를 통한 가격 정보 가져오기
+                    quote = self.get_quote(target)
+                    if not quote or getattr(quote, 'price', 0) <= 0:
+                        logging.warning(f"{target} 유효하지 않은 가격 정보")
+                        continue
+                        
+                    target_data = {
+                        'ticker':   target,
+                        'price':    getattr(quote, 'price', 0),
+                        'quantity': 1, # 임시
+                        'name':     getattr(quote, 'name', target)
+                    }
+
+                    if quote.price < 100: # 100달러가 기준값
+                        processed_targets.append(target_data)
+                    
+                except Exception as e:
+                    logging.error(f"{target} 시세 조회 실패: {str(e)}")
+                    continue
+            
+            # 처리된 종목이 없는 경우
+            if not processed_targets:
+                logging.info("처리 가능한 매수 대상 종목이 없습니다.")
+                return []
+                
+            return processed_targets
+            
+        except Exception as e:
+            logging.error(f"매수 종목 선정 중 오류 발생: {str(e)}")
+            import traceback
+            logging.error(f"매수 종목 선정 상세 오류: {traceback.format_exc()}")
+            return []
+    
+    def update_holdings(self):
+        '''보유 종목 정보 업데이트'''
+        try:
+            # 잔고 객체 가져오기
+            balance = self.get_balance()
+            
+            # 보유종목 정보 저장
+            self.holdings = {}
+            
+            # 튜토리얼에 따라 balance.stocks 활용
+            for stock in balance.stocks:
+                try:
+                    # 종목 정보 형식화
+                    stock_ticker = getattr(stock, 'symbol', getattr(stock, 'ticker', None))
+
+                    # 종목 정보 저장
+                    stock_info = {
+                        'ticker': stock_ticker,
+                        'quantity': getattr(stock, 'qty', 0),
+                        'price': getattr(stock, 'price', 0),
+                        'purchase_price': getattr(stock, 'avg_price', getattr(stock, 'purchase_price', 0)),
+                        'avg_price': getattr(stock, 'avg_price', 0),
+                        'current_value': getattr(stock, 'amount', 0),
+                        'profit': getattr(stock, 'profit', 0),
+                        'profit_rate': getattr(stock, 'profit_rate', 0)
+                    }
+
+                    self.holdings[stock_ticker] = stock_info
+                except Exception as stock_err:
+                    logging.error(f"종목 정보 처리 중 오류: {str(stock_err)}")
+            
+            logging.info(f"보유종목 업데이트 완료: {len(self.holdings)}개 종목")
+            return True
+        
+        except Exception as e:
+            logging.error(f"보유종목 업데이트 실패: {str(e)}")
+            logging.error(traceback.format_exc())
+            return False
+
+    def get_balance(self):
+        ''' 내 계좌 잔고 확인하는 함수
+
+        returns:
+            KisIntegrationBalance: 예수금, 보유종목 등 내 계좌에 대한 정보
+        '''
+        account = self.kis.account()
+        balance: KisBalance = account.balance()
+        return balance
+
+    def get_sell_recommendations(self):
+        """모든 보유 종목에 대한 매도 추천을 생성합니다.
         
         Returns:
-            List[str]: 추천 종목 티커 리스트
-        '''
-        if not tickers:
-            tickers = self.get_default_tickers()
-
-        result = self.run_strategy(tickers)
-
-        return [item['ticker'] for item in result['buy']]
+            List[Dict[str, Any]]: 매도 추천 종목 리스트
+        """
+        try:
+            # 보유 종목 정보 업데이트
+            self.update_holdings()
+            
+            sell_recommendations = []
+            
+            for ticker, holding_info in self.holdings.items():
+                try:
+                    # 1. 현재 시장 가격 확인
+                    current_price = self.get_quote(ticker)
+                    
+                    # 2. 손익률 계산
+                    avg_price = holding_info['avg_price']
+                    if not avg_price:
+                        continue
+                        
+                    profit_rate = (current_price - avg_price) / avg_price * 100
+                    
+                    # 3. 매도 신호 목록
+                    sell_signals = []
+                    
+                    # 4. 매도 조건 확인
+                    settings = self.config.get("trading_settings", {})
+                    
+                    # 손절점 도달
+                    stop_loss = settings.get("stop_loss_threshold", -7.0)
+                    if profit_rate <= stop_loss:
+                        sell_signals.append("손절점 도달")
+                        
+                    # 익절점 도달
+                    take_profit = settings.get("take_profit_threshold", 20.0)
+                    if profit_rate >= take_profit:
+                        sell_signals.append("익절점 도달")
+                        
+                    # 홀딩 기간 초과
+                    max_holding_days = settings.get("max_holding_days", 30)
+                    buy_date_str = holding_info['buy_date']
+                    
+                    try:
+                        buy_date = datetime.strptime(buy_date_str, "%Y-%m-%d")
+                        days_held = (datetime.now() - buy_date).days
+                        if days_held > max_holding_days:
+                            sell_signals.append(f"홀딩 기간 초과 ({days_held}일)")
+                    except (ValueError, TypeError):
+                        pass
+                        
+                    # 매도 신호가 있는 경우만 추가
+                    if sell_signals:
+                        sell_recommendations.append({
+                            'ticker': ticker,
+                            'name': getattr(quote, 'name', ticker),
+                            'current_price': current_price,
+                            'avg_price': avg_price,
+                            'profit_rate': profit_rate,
+                            'quantity': holding_info['quantity'],
+                            'sell_signals': sell_signals,
+                            'total_value': holding_info['quantity'] * current_price
+                        })
+                        
+                except Exception as e:
+                    logging.error(f"종목 {ticker} 매도 추천 생성 중 오류: {str(e)}")
+                    continue
+                    
+            return sell_recommendations
+            
+        except Exception as e:
+            logging.error(f"매도 추천 생성 중 오류: {str(e)}")
+            return []

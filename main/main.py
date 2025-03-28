@@ -3,11 +3,10 @@ import logging
 import yaml
 
 from module.analysts.tbm_analyst import TBM_Analyst
-from module.trader import Trader
+from module.traders.trader import Trader
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
 #region variables
 tbm_analyst = None
 trader      = None
@@ -61,13 +60,18 @@ def init():
     trader      = Trader(kis, config)
 
 def main():
+    # 매수주문
     tickers         = tbm_analyst.get_nasdaq_top_100()
-    recommendations = tbm_analyst.generate_recommendations(tickers)
-    buy_targets     = trader.select_stocks_to_buy(recommendations)
-    trader.auto_trading_cycle(buy_targets)
+    recommendations = tbm_analyst.get_recommendations_to_buy(tickers)
+    result          = trader.execute_buy_orders(recommendations)
 
-    # 리스트 받아와서 구입
-    pass
+    logging.info(f"매수주문 완료: {len(result)}개")
+
+    # 매도주문
+    recommendations = tbm_analyst.get_sell_recommendations()
+    result          = trader.execute_sell_orders(recommendations)
+
+    logging.info(f"매도주문 완료: {len(result)}개")
 #endregion functions
 
 #region main
