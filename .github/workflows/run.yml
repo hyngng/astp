@@ -89,7 +89,7 @@ jobs:
         # 변경된 config.yaml 사용 준비 완료
         echo "data/config.yaml 파일 업데이트 완료"
         
-    - name: Run auto trading bot
+    - name: Run ASTP
       run: |
         python main/main.py
       env:
