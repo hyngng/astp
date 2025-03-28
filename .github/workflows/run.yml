@@ -1,6 +1,9 @@
 name: Auto Stock Trading Program
 
 on:
+  # 수동 실행 트리거 추가
+  workflow_dispatch:
+  
   schedule:
     # 미국 장 개장 시간 (ET 9:30 AM)
     - cron: '30 13 * * 1-5'  # UTC 13:30 (미국 서머타임-EDT 9:30, 한국 22:30)
@@ -52,7 +55,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         
-    - name: Run 
+    - name: Run auto trading bot
       run: |
         python main/main.py
       env:
