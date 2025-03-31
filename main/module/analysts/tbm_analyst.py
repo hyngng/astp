@@ -333,23 +333,10 @@ class TBM_Analyst(Analyst):
             self.holdings = {}
             
             # 튜토리얼에 따라 balance.stocks 활용
-            for stock in balance.stocks:
+            for stock_info in balance.stocks:
                 try:
                     # 종목 정보 형식화
-                    stock_ticker = getattr(stock, 'symbol', getattr(stock, 'ticker', None))
-
-                    # 종목 정보 저장
-                    stock_info = {
-                        'ticker': stock_ticker,
-                        'quantity': getattr(stock, 'qty', 0),
-                        'price': getattr(stock, 'price', 0),
-                        'purchase_price': getattr(stock, 'avg_price', getattr(stock, 'purchase_price', 0)),
-                        'avg_price': getattr(stock, 'avg_price', 0),
-                        'current_value': getattr(stock, 'amount', 0),
-                        'profit': getattr(stock, 'profit', 0),
-                        'profit_rate': getattr(stock, 'profit_rate', 0)
-                    }
-
+                    stock_ticker = getattr(stock_info, 'symbol', getattr(stock_info, 'ticker', None))
                     self.holdings[stock_ticker] = stock_info
                 except Exception as stock_err:
                     logging.error(f"종목 정보 처리 중 오류: {str(stock_err)}")
@@ -373,79 +360,79 @@ class TBM_Analyst(Analyst):
         return balance
 
     def get_sell_recommendations(self):
-        """모든 보유 종목에 대한 매도 추천을 생성합니다.
+        """보유 종목 중 매도 조건을 충족하는 종목 선정
         
         Returns:
-            List[Dict[str, Any]]: 매도 추천 종목 리스트
+            List[Dict]: 매도 대상 종목 리스트
         """
         try:
             # 보유 종목 정보 업데이트
             self.update_holdings()
             
-            sell_recommendations = []
+            recommendations = []
+            total_holdings = len(self.holdings)
             
-            for ticker, holding_info in self.holdings.items():
-                for attempt in range(4):
-                    try:
-                        # 1. 현재 시장 가격 확인
-                        current_price = self.get_quote(ticker)
-                        
-                        # 2. 손익률 계산
-                        avg_price = holding_info.get('avg_price')
-                        if avg_price is None:
-                            break
-                        
-                        profit_rate = (current_price - avg_price) / avg_price * 100
-                        
-                        # 3. 매도 신호 목록
-                        sell_signals = []
-                        
-                        # 4. 매도 조건 확인
-                        settings = self.config.get("trading_settings", {})
-
-                        # 손절점 도달
-                        stop_loss = settings.get("stop_loss_threshold", -7.0)
-                        if profit_rate <= stop_loss:
-                            sell_signals.append("손절점 도달")
-                            
-                        # 익절점 도달
-                        take_profit = settings.get("take_profit_threshold", 20.0)
-                        if profit_rate >= take_profit:
-                            sell_signals.append("익절점 도달")
-                            
-                        # 홀딩 기간 초과
-                        max_holding_days = settings.get("max_holding_days", 30)
-                        buy_date_str = holding_info.get('buy_date')
-
-                        try:
-                            buy_date = datetime.strptime(buy_date_str, "%Y-%m-%d")
-                            days_held = (datetime.now() - buy_date).days
-                            if days_held > max_holding_days:
-                                sell_signals.append(f"홀딩 기간 초과 ({days_held}일)")
-                        except (ValueError, TypeError):
-                            pass
-                            
-                        # 매도 신호가 있는 경우만 추가
-                        if sell_signals:
-                            sell_recommendations.append({
-                                'ticker': ticker,
-                                'name': ticker,  # 이름이 없다면 티커 사용
-                                'current_price': current_price,
-                                'avg_price': avg_price,
-                                'profit_rate': profit_rate,
-                                'quantity': holding_info.get('quantity', 0),
-                                'sell_signals': sell_signals,
-                                'total_value': holding_info.get('quantity', 0) * current_price
-                            })
-                        
-                        break  # 성공하면 반복문 탈출
-
-                    except Exception as e:
-                        logging.error(f"[{attempt+1}/4] 종목 {ticker} 매도 추천 생성 중 오류: {str(e)}")
-                        time.sleep(1)  # 1초 대기 후 재시도
+            for idx, (ticker, holding_info) in enumerate(self.holdings.items()):
+                try:
+                    logging.info(f"[{idx+1}/{total_holdings}] 종목 {ticker} 매도조건 검토 중...")
                     
-            return sell_recommendations
+                    # 현재 시장 가격 확인
+                    quote = self.get_quote(ticker)
+                    
+                    # 현재가 추출 (KisForeignQuote 객체 등 다양한 타입 처리)
+                    current_price = quote.price
+                    
+                    # 시세 정보가 없으면 건너뜀
+                    if not current_price or current_price <= 0:
+                        logging.warning(f"종목 {ticker} 현재가 정보 없음")
+                        continue
+                    
+                    # 평균 매수가 확인
+                    avg_price = holding_info.price
+                    if not avg_price or avg_price <= 0:
+                        logging.warning(f"종목 {ticker} 평균 매수가 정보 없음")
+                        continue
+                    
+                    # 수익률 계산
+                    profit_rate = (current_price - avg_price) / avg_price * 100
+                    
+                    # 매도 조건 확인
+                    sell_signals = []
+                    
+                    # 1. 손절점 도달
+                    stop_loss = self.config.get("stop_loss_threshold", -7.0)
+                    if profit_rate <= stop_loss:
+                        sell_signals.append("손절점 도달")
+                    
+                    # 2. 익절점 도달
+                    take_profit = self.config.get("take_profit_threshold", 20.0)
+                    if profit_rate >= take_profit:
+                        sell_signals.append("익절점 도달")
+                    
+                    # 매도 추천이 있는 경우만 추가
+                    if sell_signals:
+                        # 수량 정보 가져오기
+                        quantity = holding_info.quantity
+                        if not quantity:
+                            quantity = getattr(holding_info, 'quantity', 0)
+                        
+                        recommendations.append({
+                            'ticker': ticker,
+                            'name': getattr(quote, 'name', ticker),
+                            'current_price': current_price,
+                            'avg_price': avg_price,
+                            'profit_rate': profit_rate,
+                            'quantity': quantity,
+                            'sell_signals': sell_signals
+                        })
+                
+                except Exception as e:
+                    logging.error(f"[{idx+1}/{total_holdings}] 종목 {ticker} 매도 추천 생성 중 오류: {str(e)}")
+                    continue
+            
+            return recommendations
             
         except Exception as e:
             logging.error(f"매도 추천 생성 중 오류: {str(e)}")
-            return []
+            logging.error(traceback.format_exc())
+            return [] 

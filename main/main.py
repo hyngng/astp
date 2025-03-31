@@ -7,6 +7,7 @@ from module.traders.trader import Trader
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
 #region variables
 tbm_analyst = None
 trader      = None
