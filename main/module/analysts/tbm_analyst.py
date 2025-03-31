@@ -253,12 +253,15 @@ class TBM_Analyst(Analyst):
     def get_quote(self, ticker: str):
         '''종목 시세 정보를 가져오는 함수
         '''
-        time.sleep(1)
-        try:
-            return self.kis.stock(ticker).quote()
-        except Exception as e:
-            logging.error(f"시세 정보 가져오기 실패 ({ticker}): {str(e)}")
-            raise
+        attempts = 0
+        while attempts < 4:
+            try:
+                return self.kis.stock(ticker).quote()
+            except Exception as e:
+                logging.error(f"[{attempts+1}/4] 시세 정보 가져오기 실패 ({ticker}): {str(e)}")
+                attempts += 1
+                time.sleep(1)  # 1초 대기 후 재시도
+        raise Exception(f"시세 정보 가져오기 실패 (최대 재시도 초과) - {ticker}")
 
     def get_recommendations_to_buy(self, tickers):
         '''TBM 전략을 기반으로 추천 종목을 생성하고 처리합니다.
@@ -382,61 +385,64 @@ class TBM_Analyst(Analyst):
             sell_recommendations = []
             
             for ticker, holding_info in self.holdings.items():
-                try:
-                    # 1. 현재 시장 가격 확인
-                    current_price = self.get_quote(ticker)
-                    
-                    # 2. 손익률 계산
-                    avg_price = holding_info['avg_price']
-                    if not avg_price:
-                        continue
-                        
-                    profit_rate = (current_price - avg_price) / avg_price * 100
-                    
-                    # 3. 매도 신호 목록
-                    sell_signals = []
-                    
-                    # 4. 매도 조건 확인
-                    settings = self.config.get("trading_settings", {})
-                    
-                    # 손절점 도달
-                    stop_loss = settings.get("stop_loss_threshold", -7.0)
-                    if profit_rate <= stop_loss:
-                        sell_signals.append("손절점 도달")
-                        
-                    # 익절점 도달
-                    take_profit = settings.get("take_profit_threshold", 20.0)
-                    if profit_rate >= take_profit:
-                        sell_signals.append("익절점 도달")
-                        
-                    # 홀딩 기간 초과
-                    max_holding_days = settings.get("max_holding_days", 30)
-                    buy_date_str = holding_info['buy_date']
-                    
+                for attempt in range(4):
                     try:
-                        buy_date = datetime.strptime(buy_date_str, "%Y-%m-%d")
-                        days_held = (datetime.now() - buy_date).days
-                        if days_held > max_holding_days:
-                            sell_signals.append(f"홀딩 기간 초과 ({days_held}일)")
-                    except (ValueError, TypeError):
-                        pass
+                        # 1. 현재 시장 가격 확인
+                        current_price = self.get_quote(ticker)
                         
-                    # 매도 신호가 있는 경우만 추가
-                    if sell_signals:
-                        sell_recommendations.append({
-                            'ticker': ticker,
-                            'name': getattr(quote, 'name', ticker),
-                            'current_price': current_price,
-                            'avg_price': avg_price,
-                            'profit_rate': profit_rate,
-                            'quantity': holding_info['quantity'],
-                            'sell_signals': sell_signals,
-                            'total_value': holding_info['quantity'] * current_price
-                        })
+                        # 2. 손익률 계산
+                        avg_price = holding_info.get('avg_price')
+                        if avg_price is None:
+                            break
                         
-                except Exception as e:
-                    logging.error(f"종목 {ticker} 매도 추천 생성 중 오류: {str(e)}")
-                    continue
+                        profit_rate = (current_price - avg_price) / avg_price * 100
+                        
+                        # 3. 매도 신호 목록
+                        sell_signals = []
+                        
+                        # 4. 매도 조건 확인
+                        settings = self.config.get("trading_settings", {})
+
+                        # 손절점 도달
+                        stop_loss = settings.get("stop_loss_threshold", -7.0)
+                        if profit_rate <= stop_loss:
+                            sell_signals.append("손절점 도달")
+                            
+                        # 익절점 도달
+                        take_profit = settings.get("take_profit_threshold", 20.0)
+                        if profit_rate >= take_profit:
+                            sell_signals.append("익절점 도달")
+                            
+                        # 홀딩 기간 초과
+                        max_holding_days = settings.get("max_holding_days", 30)
+                        buy_date_str = holding_info.get('buy_date')
+
+                        try:
+                            buy_date = datetime.strptime(buy_date_str, "%Y-%m-%d")
+                            days_held = (datetime.now() - buy_date).days
+                            if days_held > max_holding_days:
+                                sell_signals.append(f"홀딩 기간 초과 ({days_held}일)")
+                        except (ValueError, TypeError):
+                            pass
+                            
+                        # 매도 신호가 있는 경우만 추가
+                        if sell_signals:
+                            sell_recommendations.append({
+                                'ticker': ticker,
+                                'name': ticker,  # 이름이 없다면 티커 사용
+                                'current_price': current_price,
+                                'avg_price': avg_price,
+                                'profit_rate': profit_rate,
+                                'quantity': holding_info.get('quantity', 0),
+                                'sell_signals': sell_signals,
+                                'total_value': holding_info.get('quantity', 0) * current_price
+                            })
+                        
+                        break  # 성공하면 반복문 탈출
+
+                    except Exception as e:
+                        logging.error(f"[{attempt+1}/4] 종목 {ticker} 매도 추천 생성 중 오류: {str(e)}")
+                        time.sleep(1)  # 1초 대기 후 재시도
                     
             return sell_recommendations
             
