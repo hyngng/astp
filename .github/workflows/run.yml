@@ -41,13 +41,13 @@ jobs:
         pip install -r requirements.txt
         
     - name: Update config.yaml
-        run: |
-          echo "id: \"$ID\"" > data/config.yaml
-          echo "account: \"$ACCOUNT\"" >> config.yaml
-          echo "app_key: \"$APP_KEY\"" >> config.yaml
-          echo "app_secret: \"$APP_SECRET\"" >> config.yaml
-          echo "virtual_app_key: \"$VIRTUAL_APP_KEY\"" >> config.yaml
-          echo "virtual_app_secret: \"$VIRTUAL_APP_SECRET\"" >> config.yaml
+      run: |
+        yq -i '.id = env(ID)' data/config.yaml
+        yq -i '.account = env(ACCOUNT)' data/config.yaml
+        yq -i '.app_key = env(APP_KEY)' data/config.yaml
+        yq -i '.app_secret = env(APP_SECRET)' data/config.yaml
+        yq -i '.virtual_app_key = env(VIRTUAL_APP_KEY)' data/config.yaml
+        yq -i '.virtual_app_secret = env(VIRTUAL_APP_SECRET)' data/config.yaml
         
     - name: Run ASTP
       run: |
