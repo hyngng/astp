@@ -1,11 +1,11 @@
 # API key, secret은 GitHub Secret에서 관리함
 api_info:
-    id:
-    account:
-    app_key:
-    app_secret:
-    virtual_app_key:
-    virtual_app_secret:
+    id: "@1983041"
+    account: "50124703-01"
+    app_key: PSf0RZCQPbvYUBEoSheh35g3Xw17P4LElB0g
+    app_secret: c6O7McqmYjiMO0TzJRZthUWpOBc7i2MJpnpeBCI93GwAcQZ0yBiYRWmxJQztiZZLPenlGE5lsUwPXuVIrw1csj15++v/IU5reC3TnfvqPzDw7BIYHOqinbmGi/3s+3/XgVWhH25MGgLovIOrYagbQkp0Bo8j4wecUrPUxXIesQpT3wZuer4=
+    virtual_app_key: PS9xvU7fw6zIGDZKvI4blJyfx5WlqCQhwApd
+    virtual_app_secret: eveML2B57KexvanXRLnihgUHIfb2uWOnD4NwHn/mVzDOmVkdP/DaHJhAEWrEo5LRoynyStVGvIqsDO9n1V03WtVPkjsiZG9k2NJXEfgMv+6iRSyL/OnogozCOT+CJOoPGF6goOEspoZUOrTS7pR/ZZ/+zT+77+IIk769aB4ad8KJE5bDl4s=
     is_virtual: true   # 모의투자 모드 활성화 여부 (true: 가상잔고 사용, false: 실제잔고 사용)
 
 # 밑의 옵션들은 쓸모있는지좀 보자

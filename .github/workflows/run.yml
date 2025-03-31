@@ -20,11 +20,10 @@ jobs:
   auto-trading:
     runs-on: ubuntu-latest
     env:
-      PYTHONPATH: ${{ github.workspace }}
-      ACCOUNT_ID: ${{ secrets.ACCOUNT_ID }}
-      ACCOUNT_NUMBER: ${{ secrets.ACCOUNT_NUMBER }}
-      ACTUAL_APP_KEY: ${{ secrets.ACTUAL_APP_KEY }}
-      ACTUAL_APP_SECRET: ${{ secrets.ACTUAL_APP_SECRET }}
+      ID: ${{ secrets.ACCOUNT_ID }}
+      ACCOUNT: ${{ secrets.ACCOUNT_NUMBER }}
+      APP_KEY: ${{ secrets.ACTUAL_APP_KEY }}
+      APP_SECRET: ${{ secrets.ACTUAL_APP_SECRET }}
       VIRTUAL_APP_KEY: ${{ secrets.VIRTUAL_APP_KEY }}
       VIRTUAL_APP_SECRET: ${{ secrets.VIRTUAL_APP_SECRET }}
 
@@ -42,33 +41,13 @@ jobs:
         pip install -r requirements.txt
         
     - name: Update config.yaml
-      run: |
-        # Python으로 config.yaml 업데이트
-        python3 - <<EOF
-        import yaml
-        import os
-        
-        # config.yaml 파일 경로
-        config_file = "data/config.yaml"
-        
-        # 파일 읽기
-        with open(config_file, 'r') as f:
-            config = yaml.safe_load(f)
-        
-        # 값 업데이트
-        config['id'] = os.environ.get('ACCOUNT_ID', '')
-        config['account'] = os.environ.get('ACCOUNT_NUMBER', '')
-        config['app_key'] = os.environ.get('ACTUAL_APP_KEY', '')
-        config['app_secret'] = os.environ.get('ACTUAL_APP_SECRET', '')
-        config['virtual_app_key'] = os.environ.get('VIRTUAL_APP_KEY', '')
-        config['virtual_app_secret'] = os.environ.get('VIRTUAL_APP_SECRET', '')
-        
-        # 파일 쓰기
-        with open(config_file, 'w') as f:
-            yaml.dump(config, f, default_flow_style=False)
-        
-        print("config.yaml 파일 업데이트 완료")
-        EOF
+        run: |
+          echo "id: \"$ID\"" > data/config.yaml
+          echo "account: \"$ACCOUNT\"" >> config.yaml
+          echo "app_key: \"$APP_KEY\"" >> config.yaml
+          echo "app_secret: \"$APP_SECRET\"" >> config.yaml
+          echo "virtual_app_key: \"$VIRTUAL_APP_KEY\"" >> config.yaml
+          echo "virtual_app_secret: \"$VIRTUAL_APP_SECRET\"" >> config.yaml
         
     - name: Run ASTP
       run: |
