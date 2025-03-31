@@ -374,7 +374,7 @@ class TBM_Analyst(Analyst):
             
             for idx, (ticker, holding_info) in enumerate(self.holdings.items()):
                 try:
-                    logging.info(f"[{idx+1}/{total_holdings}] 종목 {ticker} 매도조건 검토 중...")
+                    logging.info(f"[{idx+1}/{total_holdings}] 종목 {ticker} 매도 추천 생성 중...")
                     
                     # 현재 시장 가격 확인
                     quote = self.get_quote(ticker)
@@ -388,8 +388,8 @@ class TBM_Analyst(Analyst):
                         continue
                     
                     # 평균 매수가 확인
-                    avg_price = holding_info.price
-                    if not avg_price or avg_price <= 0:
+                    
+                    if not holding_info.price or holding_info.price <= 0:
                         logging.warning(f"종목 {ticker} 평균 매수가 정보 없음")
                         continue
                     

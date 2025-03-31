@@ -261,22 +261,25 @@ class Trader:
             
             logging.info(f"{'모의' if is_virtual else '실제'} 주문 시도: {ticker} {order_type} {quantity}주 @ {price:,.2f}")
 
-            try:
-                stock = self.kis.stock(ticker)
+            while retry_count < 4:
+                try:
+                    stock = self.kis.stock(ticker)
+                    
+                    if order_type == "BUY":
+                        stock.buy(price=price, qty=quantity)
+                        logging.info(f"매수 주문 성공: {ticker} {order_type} {quantity}주 @ {price:,.2f}")
+                    else:
+                        stock.sell(price=price, qty=quantity)
+                        logging.info(f"매도 주문 성공: {ticker} {order_type} {quantity}주 @ {price:,.2f}")
+                    
+                    return True  # 성공 시 함수 종료
                 
-                if order_type == "BUY":
-                    # 매수 주문
-                    stock.buy(price=price, qty=quantity)
-                    logging.info(f"매수 주문 성공: {ticker} {order_type} {quantity}주 @ {price:,.2f}")
-                    return True
-                else:
-                    # 매도 주문
-                    stock.sell(price=price, qty=quantity)
-                    logging.info(f"매도 주문 성공: {ticker} {order_type} {quantity}주 @ {price:,.2f}")
-                    return True
-                
-            except Exception as e:
-                logging.warning(f"매수 또는 매도 주문 호출 실패: {str(e)}")
+                except Exception as e:
+                    logging.warning(f"매수 또는 매도 주문 호출 실패 (시도 {retry_count + 1}/4): {str(e)}")
+                    retry_count += 1
+            
+            logging.error(f"주문 실패: {ticker} {order_type} {quantity}주 @ {price:,.2f} (최대 재시도 횟수 초과)")
+            return False
         
         except Exception as outer_e:
             logging.error(f"{ticker} {order_type} 주문 초기화 중 오류: {str(outer_e)}")
