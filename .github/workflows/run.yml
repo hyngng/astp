@@ -42,12 +42,12 @@ jobs:
         
     - name: Update config.yaml
       run: |
-        yq -i '.id = env(ID)' data/config.yaml
-        yq -i '.account = env(ACCOUNT)' data/config.yaml
-        yq -i '.app_key = env(APP_KEY)' data/config.yaml
-        yq -i '.app_secret = env(APP_SECRET)' data/config.yaml
-        yq -i '.virtual_app_key = env(VIRTUAL_APP_KEY)' data/config.yaml
-        yq -i '.virtual_app_secret = env(VIRTUAL_APP_SECRET)' data/config.yaml
+        yq -i '.id = "\"" + strenv(ID) + "\""' data/config.yaml
+        yq -i '.account = "\"" + strenv(ACCOUNT) + "\""' data/config.yaml
+        yq -i '.app_key = "\"" + strenv(APP_KEY) + "\""' data/config.yaml
+        yq -i '.app_secret = "\"" + strenv(APP_SECRET) + "\""' data/config.yaml
+        yq -i '.virtual_app_key = "\"" + strenv(VIRTUAL_APP_KEY) + "\""' data/config.yaml
+        yq -i '.virtual_app_secret = "\"" + strenv(VIRTUAL_APP_SECRET) + "\""' data/config.yaml
         
     - name: Run ASTP
       run: |
