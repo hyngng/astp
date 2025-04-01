@@ -49,10 +49,10 @@ jobs:
         yq -i '.api_info.virtual_app_key = env(VIRTUAL_APP_KEY)' data/config.yaml
         yq -i '.api_info.virtual_app_secret = env(VIRTUAL_APP_SECRET)' data/config.yaml
       env:
-        ID: ${{ secrets.ID }}
-        ACCOUNT: ${{ secrets.ACCOUNT }}
-        APP_KEY: ${{ secrets.APP_KEY }}
-        APP_SECRET: ${{ secrets.APP_SECRET }}
+        ID: ${{ secrets.ACCOUNT_ID }}
+        ACCOUNT: ${{ secrets.ACCOUNT_NUMBER }}
+        APP_KEY: ${{ secrets.ACTUAL_APP_KEY }}
+        APP_SECRET: ${{ secrets.ACTUAL_APP_SECRET }}
         VIRTUAL_APP_KEY: ${{ secrets.VIRTUAL_APP_KEY }}
         VIRTUAL_APP_SECRET: ${{ secrets.VIRTUAL_APP_SECRET }}
         
