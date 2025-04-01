@@ -1,11 +1,11 @@
 # API key, secret은 GitHub Secret에서 관리함
 api_info:
-    id: 
-    account: 
-    app_key: 
-    app_secret: 
-    virtual_app_key: 
-    virtual_app_secret: 
+    id: ""
+    account: ""
+    app_key: ""
+    app_secret: ""
+    virtual_app_key: ""
+    virtual_app_secret: ""
     is_virtual: true   # 모의투자 모드 활성화 여부 (true: 가상잔고 사용, false: 실제잔고 사용)
 
 # 밑의 옵션들은 쓸모있는지좀 보자
