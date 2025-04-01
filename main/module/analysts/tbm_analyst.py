@@ -256,6 +256,7 @@ class TBM_Analyst(Analyst):
         attempts = 0
         while attempts < 4:
             try:
+                logging.error(f"[{attempts+1}/4] 시세 정보 가져오기 성공 ({ticker})")
                 return self.kis.stock(ticker).quote()
             except Exception as e:
                 logging.error(f"[{attempts+1}/4] 시세 정보 가져오기 실패 ({ticker}): {str(e)}")
@@ -360,6 +361,13 @@ class TBM_Analyst(Analyst):
         balance: KisBalance = account.balance()
         return balance
 
+    def get_stock_data_from_balance_by_ticker(self, balance, ticker_symbol):
+        """balance 객체에서 특정 티커 심볼의 주식 데이터를 찾아 반환합니다."""
+        for stock in balance.stocks:
+            if stock.symbol == ticker_symbol:
+                return stock
+        return None  # 티커 심볼을 찾지 못한 경우 None 반환
+
     def get_sell_recommendations(self):
         """보유 종목 중 매도 조건을 충족하는 종목 선정
         
@@ -385,8 +393,6 @@ class TBM_Analyst(Analyst):
 
                     # balance에 ticker 받아서 매입금액이나, 아니면 수익률이라도 알 수 있지 않을까?
                     balance = self.get_balance()
-                    print(quote)
-                    print(balance)
                     
                     # 시세 정보가 없으면 건너뜀
                     if not current_price or current_price <= 0:
@@ -399,7 +405,7 @@ class TBM_Analyst(Analyst):
                         continue
                     
                     # 수익률 계산
-                    profit_rate = ((current_price - avg_price) / avg_price) * 100 # (현재가/매수가)
+                    profit_rate = self.get_stock_data_from_balance_by_ticker(balance, ticker).profit_rate
                     
                     # 매도 조건 확인
                     sell_signals = []
@@ -425,7 +431,6 @@ class TBM_Analyst(Analyst):
                             'ticker': ticker,
                             'name': getattr(quote, 'name', ticker),
                             'current_price': current_price,
-                            'avg_price': avg_price,
                             'profit_rate': profit_rate,
                             'quantity': quantity,
                             'sell_signals': sell_signals
