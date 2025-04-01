@@ -349,6 +349,7 @@ class TBM_Analyst(Analyst):
             logging.error(traceback.format_exc())
             return False
 
+    # analyst에 옮기기
     def get_balance(self):
         ''' 내 계좌 잔고 확인하는 함수
 
@@ -379,8 +380,13 @@ class TBM_Analyst(Analyst):
                     # 현재 시장 가격 확인
                     quote = self.get_quote(ticker)
                     
-                    # 현재가 추출 (KisForeignQuote 객체 등 다양한 타입 처리)
+                    # 현재가 추출
                     current_price = quote.price
+
+                    # balance에 ticker 받아서 매입금액이나, 아니면 수익률이라도 알 수 있지 않을까?
+                    balance = self.get_balance()
+                    print(quote)
+                    print(balance)
                     
                     # 시세 정보가 없으면 건너뜀
                     if not current_price or current_price <= 0:
@@ -388,13 +394,12 @@ class TBM_Analyst(Analyst):
                         continue
                     
                     # 평균 매수가 확인
-                    
                     if not holding_info.price or holding_info.price <= 0:
                         logging.warning(f"종목 {ticker} 평균 매수가 정보 없음")
                         continue
                     
                     # 수익률 계산
-                    profit_rate = (current_price - avg_price) / avg_price * 100
+                    profit_rate = ((current_price - avg_price) / avg_price) * 100 # (현재가/매수가)
                     
                     # 매도 조건 확인
                     sell_signals = []

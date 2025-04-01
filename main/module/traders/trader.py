@@ -261,6 +261,7 @@ class Trader:
             
             logging.info(f"{'모의' if is_virtual else '실제'} 주문 시도: {ticker} {order_type} {quantity}주 @ {price:,.2f}")
 
+            retry_count = 0
             while retry_count < 4:
                 try:
                     stock = self.kis.stock(ticker)
