@@ -20,7 +20,3 @@
 - Add buy limits and sell conditions.
 - Create classes and organize functions.
 - Build an Android application using Android Studio.
-
-<br>
-
-- More details can be found **[here (written in Korean)](https://hyngng.github.io/posts/astp/)**.
