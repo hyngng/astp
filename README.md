@@ -20,7 +20,3 @@
 - 매수 한도와 매도 조건 추가
 - 클래스 작성 및 함수 유형화
 - Android Studio를 통한 안드로이드 어플리케이션 빌드
-
-<br>
-
-더 자세한 사항은 [이곳](https://hyngng.github.io/posts/astp/)에서 확인하실 수 있습니다.
